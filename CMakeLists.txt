@@ -6,6 +6,10 @@ project(devil-cuda LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Set nvcc as cuda compiler
+set(CMAKE_CUDA_COMPILER nvcc)
+set(CMAKE_CUDA_ARCHITECTURES "72")
+
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -20,12 +24,14 @@ find_package(CUDAToolkit REQUIRED)
 
 #set_property(TARGET ${PROJECT_NAME} PROPERTY CUDA_RUNTIME_LIBRARY Shared)
 
-add_executable(main.x src/main.cpp)
+set_source_files_properties(src/inverse.cpp PROPERTIES LANGUAGE CUDA)
+
+add_executable(main.x src/main.cpp src/inverse.cpp)
 add_executable(test.x src/test.cpp src/inverse.cpp)
 
 
-target_link_libraries(main.x CUDA::cudart CUDA::cublas)
-target_link_libraries(test.x gtest_main CUDA::cudart CUDA::cublas)
+target_link_libraries(main.x CUDA::cudart CUDA::cublas CUDA::cusolver)
+target_link_libraries(test.x gtest_main CUDA::cudart CUDA::cusolver)
 
 enable_testing()
 include(GoogleTest)
