@@ -44,6 +44,8 @@ inline const char* cusolverGetErrorString(cusolverStatus_t status) {
     }
 }
 
+#define CUTENSOR_CHECK(x) { const auto err = x;\
+    if (err != CUTENSOR_STATUS_SUCCESS) {printf("Error: %s in line %d\n", cutensorGetErrorString(err), __LINE__); exit(-1); } }
 
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true) {
     if (code != cudaSuccess) {
