@@ -52,13 +52,11 @@ void invertExact(std::vector<float> vec_exact,std::vector<float> vec_inverse_exa
   CUSOLVER_CHECK( cusolverDnCreate(&cusolverH) );
   inverseMatrix(cusolverH, vec, vec_inverse, col);
   CUDA_CHECK( cudaDeviceSynchronize());
-
   for(int i=0;i<col2;++i) 
     EXPECT_NEAR(vec_inverse[i], vec_inverse_exact[i], 1E-6);
   CUSOLVER_CHECK( cusolverDnDestroy(cusolverH) );
   CUDA_CHECK( cudaFree(vec) );
   CUDA_CHECK( cudaFree(vec_inverse) );
-  
 }
 
 float* einSum(std::vector<float> a, std::vector<int> a_shape,
@@ -92,10 +90,7 @@ float* einSum(std::vector<float> a, std::vector<int> a_shape,
   CUDA_CHECK( cudaMallocManaged(&b_device, size_b*sizeof(float)) );
   for (int i = 0; i < size_b; ++i)
     b_device[i]=b[i];
-  
-
   output =(float*) general_einsum(handle, a_shape, b_shape, a_device,b_device, s.c_str()); 
-
   cudaDeviceSynchronize();
   CUTENSOR_CHECK(cutensorDestroy(handle));
   CUDA_CHECK(cudaFree(a_device));
@@ -172,19 +167,11 @@ TEST(EinSum, Test4) {
 
 TEST(EinSum, Test5) {
     std::vector<float> a = {
-      1.0f,
-      2.0f,
-      3.0f,
-      4.0f,
-      5.0f,
-      6.0f,
-    1.0f,2.0f,3.0f,4.0f,5.0f,6.0f};
+      1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,
+      1.0f,2.0f,3.0f,4.0f,5.0f,6.0f};
     std::vector<int> a_shape = {2,2,3};
   std::vector<float> b = {7.0f,8.0f,9.0f,10.0f,11.0f,12.0f};
   std::vector<int> b_shape = {2, 3};
-
-
-
   std::vector<float> result_exact = {50.0f, 122.0f,
                                      68.0f, 167.0f};
   float *result_device =
@@ -212,9 +199,6 @@ TEST(InvertMatrix, Exact3X3) {
                                -5.0f, 5.0f,  -2.0f, 2.0f},
       3);
 };
-
-
-
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);

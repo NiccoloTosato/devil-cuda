@@ -31,6 +31,8 @@ link_directories( ~/.local/lib/cutensor)
 #set_property(TARGET ${PROJECT_NAME} PROPERTY CUDA_RUNTIME_LIBRARY Shared)
 
 set_source_files_properties(src/inverse.cpp PROPERTIES LANGUAGE CUDA)
+set_source_files_properties(src/main.cpp PROPERTIES LANGUAGE CUDA)
+
 
 add_executable(main.x src/main.cpp src/inverse.cpp)
 add_executable(test.x src/test.cpp src/inverse.cpp src/einsum.cpp)
