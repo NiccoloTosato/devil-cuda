@@ -4,6 +4,9 @@
 #include <cublas_v2.h>
 #include <iostream>
 #include <memory>
+#include <string>
+#include "cutensor.h"
+#include "einsum.hpp"
 #include "utils.hpp"
 
 template <typename T>
@@ -69,9 +72,21 @@ int main() {
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> k{tmp};
 
-  tmp=nullptr;
+  tmp = nullptr;
+
+  /////////////////////////////////////////////////////////////
   cublasHandle_t cublasH;
   CUBLAS_CHECK(cublasCreate(&cublasH));
+  cutensorHandle_t cutensorH;
+  CUTENSOR_CHECK( cutensorCreate(&cutensorH) );
+  /**********************
+   * Setup planCache (optional)
+   **********************/
+  constexpr int32_t numCachelines = 1024;
+  CUTENSOR_CHECK(cutensorHandleResizePlanCache(cutensorH, numCachelines) );
+  //////////////////////////////////////////////////////////////
+
+
   
   std::size_t iter{0};
   while (iter < 1) {
@@ -97,15 +112,22 @@ int main() {
     // 3.0) elementwise multiplication
     elementWise<<<blocks1D,threads1D>>>(mu_g.get(), w_q.get(), genes*cells);
 
-    /*
+
+    std::unique_ptr<float, CudaDeleter<float>> A { (float *)general_einsum(cutensorH, { (int) features,(int) cells},  {(int) genes,(int) cells}, X.get(), mu_g.get(),std::string{"fc,gc->gfc"})};
+    /*							   
+
+      //create A
       A=torch.einsum('fc,gc->gfc',X.t(), wq_mug);
-      B=torch.einsum('gfc,ck->gfk', A , X) * k.unsqueeze(1);
-
-      Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte ? 
-
-      C=torch.einsum("fc,gc->gf", X.t(), (wq_mug - 1));
       
+      //bisogna capire che fa il k.unsqueeze ?
+      B=torch.einsum('gfc,ck->gfk', A , X) * k.unsqueeze(1);
+      //facile, chiamare inversa su tutto B per N volte
+      Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte ?
+      //transpose e -1 elementwise
+      C=torch.einsum("fc,gc->gf", X.t(), (wq_mug - 1));
+      //einsum e sgemm
       delta = torch.einsum('gfk,gk->gf', Zigma, k * C)
+      
       init_beta += delta //easy
       converged = torch.max(abs(delta)) < eps //usa la norma
      */
