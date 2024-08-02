@@ -111,16 +111,21 @@ int main() {
 
     // 3.0) elementwise multiplication
     elementWise<<<blocks1D,threads1D>>>(mu_g.get(), w_q.get(), genes*cells);
-
-
-    std::unique_ptr<float, CudaDeleter<float>> A { (float *)general_einsum(cutensorH, { (int) features,(int) cells},  {(int) genes,(int) cells}, X.get(), mu_g.get(),std::string{"fc,gc->gfc"})};
-    /*							   
-
-      //create A
+    /*
+      create A
       A=torch.einsum('fc,gc->gfc',X.t(), wq_mug);
-      
-      //bisogna capire che fa il k.unsqueeze ?
+    */
+    std::unique_ptr<float, CudaDeleter<float>> A{(float *)general_einsum(cutensorH, {(int)cells,(int) features}, {(int) genes, (int)cells},X.get(), mu_g.get(), std::string{"cf,gc->gfc"})};
+
+    /*
+      bisogna capire che fa il k.unsqueeze ?
       B=torch.einsum('gfc,ck->gfk', A , X) * k.unsqueeze(1);
+    */
+    
+    std::unique_ptr<float, CudaDeleter<float>> B {
+      (float *)general_einsum(cutensorH,
+                              {(int) genes,(int) features, (int)cells}, {(int)cells,(int)features}, A.get(), X.get(), std::string{"gfc,ck->gfk"})};
+    
       //facile, chiamare inversa su tutto B per N volte
       Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte ?
       //transpose e -1 elementwise

@@ -219,6 +219,54 @@ TEST(EinSum, Transpose2) {
     CUDA_CHECK(cudaFree(result_device));
 };
 
+TEST(EinSum, Broadcast1) {
+    std::vector<float> a = {1.0f,2.0f,3.0f};
+    std::vector<int> a_shape = {3};
+    std::vector<float> b = {1.0f,2.0f,3.0f,4,5,6};
+    std::vector<int> b_shape = {2,3};
+    std::vector<float> result_exact = {6,15,12,30,18,45};
+  float *result_device =
+    (float *)einSum(a, a_shape, b, b_shape, std::string{"i,jk->ij"});
+  std::vector<float> result(result_exact.size());
+  cudaMemcpy(&result[0], result_device, result_exact.size() * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+  for (int i = 0; i < result_exact.size(); i++)
+    EXPECT_NEAR(result[i], result_exact[i], 1E-6);
+    CUDA_CHECK(cudaFree(result_device));
+};
+
+TEST(EinSum, Broadcast2) {
+  std::vector<float> a = {1.0f,2.0f,3.0f,4,5,6,1.0f,2.0f,3.0f,4,5,6, };
+  std::vector<int> a_shape = {2,2,3};
+  std::vector<float> b = {7,8,9,10,11,12};
+    std::vector<int> b_shape = {2,3};
+    std::vector<float> result_exact = {7,16,27,40,55,72,7,16,27,40,55,72};
+  float *result_device =
+    (float *)einSum(a, a_shape, b, b_shape, std::string{"ijk,jk->ijk"});
+  std::vector<float> result(result_exact.size());
+  cudaMemcpy(&result[0], result_device, result_exact.size() * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+  for (int i = 0; i < result_exact.size(); i++)
+    EXPECT_NEAR(result[i], result_exact[i], 1E-6);
+    CUDA_CHECK(cudaFree(result_device));
+};
+
+TEST(EinSum, Broadcast3) {
+  std::vector<float> a = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29};
+  std::vector<int> a_shape = {2,3,5};
+  std::vector<float> b = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
+    std::vector<int> b_shape = {5,4};
+    std::vector<float> result_exact = { 120,  130,  140,  150, 320,  355,  390,  425, 520,  580,  640,  700,720,  805,  890,  975, 920, 1030, 1140, 1250,1120, 1255, 1390, 1525};
+  float *result_device =
+    (float *)einSum(a, a_shape, b, b_shape, std::string{"gfc,ck->gfk"});
+  std::vector<float> result(result_exact.size());
+  cudaMemcpy(&result[0], result_device, result_exact.size() * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+  for (int i = 0; i < result_exact.size(); i++)
+    EXPECT_NEAR(result[i], result_exact[i], 1E-6);
+    CUDA_CHECK(cudaFree(result_device));
+};
+
 
 TEST(InvertMatrix, Identity3X3) { invertEye(3); };
 TEST(InvertMatrix, Identity100X100) {  invertEye(100); };
