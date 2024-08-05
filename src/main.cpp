@@ -5,10 +5,13 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <cusolverDn.h>
 #include "cutensor.h"
 #include "einsum.hpp"
+#include "inverse.hpp"
 #include "utils.hpp"
-
+#include <fstream>
+#include <vector>
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
@@ -38,30 +41,68 @@ __global__ void elementWise(float *mu_g, float *w_g, std::size_t elem_count) {
       mu_g[x]=mu_g[x]*w_g[x];
 }
 
+std::vector<float> readDatFile(const std::string& filename) {
+  std::ifstream file(filename, std::ios::binary);
+  if (!file) {
+    std::cerr << "Unable to open file " << filename << std::endl;
+    return {};
+  }
+
+  // Get the file size
+  file.seekg(0, std::ios::end);
+  std::streamsize size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+  // Read the data
+  std::vector<float> data(size / sizeof(float));
+  if (file.read(reinterpret_cast<char *>(data.data()), size)) {
+    std::cout << "Loading file " << filename << " Success,size: " << data.size() << std::endl;
+    return data;
+  } else {
+    std::cerr << "Error reading file " << filename << std::endl;
+    return {};
+  }
+}
 
 
+void toGPU(std::vector<float> &vec, float* vec_gpu) {
+  CUDA_CHECK( cudaMemcpy(vec_gpu, vec.data(), vec.size() * sizeof(float), cudaMemcpyHostToDevice) );
+}
 
 int main() {
   float* tmp=nullptr;  
   
-  std::size_t genes{32};
+  std::size_t genes{64};
   std::size_t cells{1024};
   std::size_t features{2};
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, features*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> X{tmp};
-
+  auto X_host = readDatFile("../data/X.dat");
+  toGPU(X_host, X.get());
+    
   CUDA_CHECK( cudaMalloc((void**)&tmp, cells*genes*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> Y{tmp};
-
+  auto Y_host = readDatFile("../data/Y.dat");
+  toGPU(Y_host, Y.get());
+  
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> offset{tmp};
-
+  auto offset_host = readDatFile("../data/off.dat");
+  toGPU(offset_host, offset.get());
+  
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*features*sizeof(float)) );
-  std::unique_ptr<float,CudaDeleter<float>> mu_beta{tmp};
-
+  std::unique_ptr<float, CudaDeleter<float>> mu_beta{tmp};
+  auto mu_beta_host = readDatFile("../data/mu_beta.dat");
+  toGPU(mu_beta_host, mu_beta.get());
+  
+  CUDA_CHECK( cudaMalloc((void**)&tmp, genes*sizeof(float)) );
+  std::unique_ptr<float,CudaDeleter<float>> k{tmp};
+  auto k_host = readDatFile("../data/K.dat");
+  toGPU(k_host, k.get());
+  
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
-  std::unique_ptr<float,CudaDeleter<float>> cg_tmp{tmp};
+  std::unique_ptr<float, CudaDeleter<float>> cg_tmp{tmp};
 
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> w_q{tmp};
@@ -69,8 +110,6 @@ int main() {
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> mu_g{tmp};
 
-  CUDA_CHECK( cudaMalloc((void**)&tmp, genes*sizeof(float)) );
-  std::unique_ptr<float,CudaDeleter<float>> k{tmp};
 
   tmp = nullptr;
 
@@ -83,7 +122,9 @@ int main() {
    * Setup planCache (optional)
    **********************/
   constexpr int32_t numCachelines = 1024;
-  CUTENSOR_CHECK(cutensorHandleResizePlanCache(cutensorH, numCachelines) );
+  CUTENSOR_CHECK(cutensorHandleResizePlanCache(cutensorH, numCachelines));
+  cusolverDnHandle_t cusolverH;
+  CUSOLVER_CHECK( cusolverDnCreate(&cusolverH) );
   //////////////////////////////////////////////////////////////
 
 
@@ -124,11 +165,29 @@ int main() {
     
     std::unique_ptr<float, CudaDeleter<float>> B {
       (float *)general_einsum(cutensorH,
-                              {(int) genes,(int) features, (int)cells}, {(int)cells,(int)features}, A.get(), X.get(), std::string{"gfc,ck->gfk"})};
+                              {(int) genes,(int) features, (int)cells}, {(int)cells,(int)features}, A.get(), X.get(), std::string{"gfc,ck->gfk"})}; //l'output ha shape GFF
+
     
-      //facile, chiamare inversa su tutto B per N volte
-      Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte ?
+    std::unique_ptr<float, CudaDeleter<float>> Bk {(float *)general_einsum(cutensorH, {(int) genes,(int) features, (int)features}, {(int)genes}, B.get(), k.get(), std::string{"gfc,g->gfc"})}; // ouput ha shape GFF
+    B.reset();
+    float *vec_inverse;
+    CUDA_CHECK(cudaMalloc(&vec_inverse, sizeof(float) * features * features * genes));
+
+    for (int i = 0; i < features * features * genes;
+         i = i + features * features) {
+      //sto for qui poi lo spignamo bene bene coi strim
+      inverseMatrix(cusolverH, Bk.get()+features*features, vec_inverse+features*features, (int) features);
+    }
+    
+    
+    Bk.reset();
+    
+    // manca moltiplicatione per K da qualche parte
+    /*
+    //facile, chiamare inversa su tutto B per N volte
+      Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte, si per ogni gene !!! 
       //transpose e -1 elementwise
+      
       C=torch.einsum("fc,gc->gf", X.t(), (wq_mug - 1));
       //einsum e sgemm
       delta = torch.einsum('gfk,gk->gf', Zigma, k * C)
@@ -136,6 +195,7 @@ int main() {
       init_beta += delta //easy
       converged = torch.max(abs(delta)) < eps //usa la norma
      */
+
   }
 }
 
