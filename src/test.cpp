@@ -267,6 +267,23 @@ TEST(EinSum, Broadcast3) {
     CUDA_CHECK(cudaFree(result_device));
 };
 
+TEST(EinSum, Broadcast4) {
+  std::vector<float> a = {8, 3, 3, 0, 3, 0, 5, 8, 1, 8, 4, 8, 9, 6, 7, 0, 9, 6, 9, 9, 3, 0, 7, 4, 7, 8, 9, 7, 7, 1, 9, 5, 0, 6, 2, 4};
+  std::vector<int> a_shape = {6,2,3};
+  std::vector<float> b = {6, 8, 9, 4, 2, 7};
+  std::vector<int> b_shape = {6};
+  std::vector<float> result_exact ={48, 18, 18, 0, 18, 0, 40, 64, 8, 64, 32, 64, 81, 54, 63, 0, 81, 54, 36, 36, 12, 0, 28, 16, 14, 16, 18, 14, 14, 2, 63, 35, 0, 42, 14, 28};
+
+  float *result_device =
+    (float *)einSum(a, a_shape, b, b_shape, std::string{"gfc,g->gfc"});
+  std::vector<float> result(result_exact.size());
+  cudaMemcpy(&result[0], result_device, result_exact.size() * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+  for (int i = 0; i < result_exact.size(); i++)
+    EXPECT_NEAR(result[i], result_exact[i], 1E-6);
+    CUDA_CHECK(cudaFree(result_device));
+}
+
 
 TEST(InvertMatrix, Identity3X3) { invertEye(3); };
 TEST(InvertMatrix, Identity100X100) {  invertEye(100); };
