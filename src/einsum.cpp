@@ -93,6 +93,7 @@ struct Einsum
         const bool isImplicit = (arrow_pos == std::string::npos);
         if (isBroadcast) // TODO
         {
+	  printf("A BROADCAST FAILL NOT IMPLEMENTED YET!");
             return;
         }
         const bool usesB = (comma_pos != std::string::npos);
