@@ -40,6 +40,7 @@ int inverseMatrix(cusolverDnHandle_t cusolverH, float *A_device, float *A_inv_de
   CUSOLVER_CHECK(cusolverDnSgetrf(cusolverH, n, n, A_device, n, workspace, pivot, info));
   if (*info != 0 ) {
     CUDA_CHECK(cudaDeviceSynchronize());
+    std::cerr<< "Info value: " << info[0] << std::endl;
     assert(0 == info[0]);
   }
 
