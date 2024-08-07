@@ -41,6 +41,12 @@ __global__ void elementWise(float *mu_g, float *w_g, std::size_t elem_count) {
       mu_g[x]=mu_g[x]*w_g[x];
 }
 
+__global__ void elementWiseSub(float *mu_g, std::size_t elem_count) {
+    int x = blockDim.x * blockIdx.x + threadIdx.x;
+    if(x<elem_count)
+      mu_g[x]=mu_g[x]-1;
+}
+
 std::vector<float> readDatFile(const std::string& filename) {
   std::ifstream file(filename, std::ios::binary);
   if (!file) {
@@ -178,18 +184,38 @@ int main() {
       //sto for qui poi lo spignamo bene bene coi strim
       inverseMatrix(cusolverH, Bk.get()+features*features, vec_inverse+features*features, (int) features);
     }
-    
-    
     Bk.reset();
     
+    //please check again the shape
+    elementWiseSub<<<blocks1D,threads1D>>>(mu_g.get(), genes*cells);
+    std::unique_ptr<float, CudaDeleter<float>> C{(float *)general_einsum(
+        cutensorH, {(int)cells, (int)features}, {(int)genes, (int)cells},
+        X.get(), mu_g.get(), std::string{"cf,gc->gf"})}; // C e' genes*features
+                                                         //
+    std::unique_ptr<float, CudaDeleter<float>> last{(float *)general_einsum(
+        cutensorH, {(int)cells, (int)features}, {(int)genes, (int)cells},
+        X.get(), mu_g.get(), std::string{"cf,gc->gf"})}; // C e' genes*features
+
+
+
+
+    // ~1)ora qui faccio elementwise substraction~
+    // ~2) poi faccio un esinsum~
+    // 3) capire che fa k*C, ma penso si possa fare con un product
+    //  in pratica C e' g*f, K invece e' 
+    // 4) einsum to calculate delta
+    // 5) init_beta
+    // 6) norma 2
     // manca moltiplicatione per K da qualche parte
     /*
     //facile, chiamare inversa su tutto B per N volte
-      Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte, si per ogni gene !!! 
+      Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte, si per
+ogni gene !!!
       //transpose e -1 elementwise
-      
+
       C=torch.einsum("fc,gc->gf", X.t(), (wq_mug - 1));
       //einsum e sgemm
+      (genes*1)*(genes*f)
       delta = torch.einsum('gfk,gk->gf', Zigma, k * C)
       
       init_beta += delta //easy
