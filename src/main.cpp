@@ -199,7 +199,7 @@ int main() {
 
   float norm{0};
   std::size_t iter{0};
-  while (iter < 1) {
+  while (iter < 3) {
     ++iter;
     const float alpha{1.0f};
     const float beta{0.0f};
@@ -260,7 +260,15 @@ int main() {
 
     
     // 3.0) elementwise multiplication
-    elementWise<<<blocks1D,threads1D>>>(mu_g.get(), w_q.get(), genes*cells);
+    elementWise<<<blocks1D,threads1D>>>(mu_g.get(), w_qT.get(), genes*cells);
+
+    std::cout << "\nmu_g after elementwise {"<<genes<<","<<cells<<"}\n"<<std::endl;
+    printMatrix<<<1, 1>>>( genes,cells, mu_g.get());
+    cudaDeviceSynchronize();
+    std::cout << std::flush;
+
+    
+
     /*
       create A
       A=torch.einsum('fc,gc->gfc',X.t(), wq_mug);
@@ -285,7 +293,12 @@ int main() {
     for (int i = 0; i < features * features * genes;
          i = i + features * features) {
       //sto for qui poi lo spignamo bene bene coi strim
-      inverseMatrix(cusolverH, Bk.get()+i, Zigma+i, (int) features);
+      inverseMatrix(cusolverH, Bk.get() + i, Zigma + i, (int)features);
+
+          std::cout << "\nZigma inversion {"<<2<<","<<2<<"}\n"<<std::endl;
+    printMatrix<<<1, 1>>>( 2,2, Zigma+i);
+    cudaDeviceSynchronize();
+    std::cout << std::flush;
     }
     Bk.reset();
     
