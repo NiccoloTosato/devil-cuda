@@ -33,8 +33,11 @@ __global__ void process2D(float *k, float* Y,float* w_q,float* mu_g, int genes, 
   const int j = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (i < genes && j < cells) {
-      const int ij = i * genes + j;
-      mu_g[ij] =(k[i]+Y[ij])/(1+k[i]*w_q[ij]);
+      const int ij = i * cells + j;
+      //if (i == 0 & j == 0) {
+      // 	printf("k[1]=%f\nY[1,0]=%f,\nw_q[1,0]=%f\n",k[0],Y[cells],w_q[cells]);
+      //}
+      mu_g[ij] =( k[i]+Y[ij] )/( 1+(k[i]*w_q[ij]) );
     }
 }
 
@@ -156,6 +159,8 @@ int main() {
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> k{tmp};
   auto k_host = readDatFile("../data-debug/K.dat");
+  for (auto &x : k_host)
+    x=1/x;
   toGPU(k_host, k.get());
 
   std::cout << "K {"<<genes<<","<<1 <<"}\n";
@@ -222,6 +227,7 @@ int main() {
                               {(int) genes,(int) cells}, {}, offset.get(),nullptr, std::string{"ij->ji"})}; //l'output ha shape GFF
 
 
+	  
     // 1.1) exponential kernel
     //      C[x]=exp(-A[x]-B[x]);
     dim3 threads1D(256);
@@ -233,13 +239,26 @@ int main() {
     cudaDeviceSynchronize();
     std::cout << std::flush;
     
-    
+    std::unique_ptr<float, CudaDeleter<float>> w_qT {
+      (float *)general_einsum(cutensorH,
+                              {(int) cells,(int) genes}, {}, w_q.get(),nullptr, std::string{"ij->ji"})}; 
+    std::cout << "\nw_q after transpose {"<<3<<","<<4 <<"}\n"<<std::endl;
+    printMatrix<<<1, 1>>>( 3,4, w_qT.get());
+    cudaDeviceSynchronize();
+    std::cout << std::flush;
+
     // 2.0) 2d kernel to broadcast
     dim3 threads2D(16,16);
-    dim3 blocks2D((genes + threads2D.x - 1) / threads2D.x, 
-               (cells + threads2D.y - 1) / threads2D.y);
-    process2D<<<blocks2D,threads2D>>>(k.get(),Y.get(),w_q.get(),mu_g.get(),genes,cells) ;
+    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
+                  (genes + threads2D.y - 1) / threads2D.y);
+    
+    process2D<<<blocks2D,threads2D>>>(k.get(),Y.get(),w_qT.get(),mu_g.get(),genes,cells) ;
+    std::cout << "\nmu_g after 2D process {"<<genes<<","<<cells<<"}\n"<<std::endl;
+    printMatrix<<<1, 1>>>( genes,cells, mu_g.get());
+    cudaDeviceSynchronize();
+    std::cout << std::flush;
 
+    
     // 3.0) elementwise multiplication
     elementWise<<<blocks1D,threads1D>>>(mu_g.get(), w_q.get(), genes*cells);
     /*
