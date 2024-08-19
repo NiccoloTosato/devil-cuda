@@ -166,7 +166,7 @@ int main() {
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float, CudaDeleter<float>> cg_tmp{tmp};
   cudaMemset(cg_tmp.get(), 0, genes*cells*sizeof(float));
-
+  
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> w_q{tmp};
   cudaMemset(w_q.get(), 0, genes * cells * sizeof(float));
@@ -211,7 +211,7 @@ int main() {
       (float *)general_einsum(cutensorH,
                               {(int) cells,(int) features}, {(int)genes,(int)features}, X.get(),mu_beta.get(), std::string{"ik,jk->ij"})}; //l'output ha shape GFF
 
-    std::cout << "w_q before exponential {"<<cells<<","<<genes <<"}\n";
+    std::cout << "\nw_q before exponential {"<<cells<<","<<genes <<"}\n";
     printMatrix<<<1, 1>>>(cells, genes, cg_tmp2.get());
 
     cudaDeviceSynchronize();
@@ -226,13 +226,13 @@ int main() {
     //      C[x]=exp(-A[x]-B[x]);
     dim3 threads1D(256);
     dim3 blocks1D((genes*cells + threads1D.x - 1) / threads1D.x);
-    expGPU<<<blocks1D,threads1D>>>(cg_tmp2.get(),offset.get(),w_q.get(),genes*cells);
+    expGPU<<<blocks1D,threads1D>>>(cg_tmp2.get(),offsetT.get(),w_q.get(),genes*cells);
 
-    std::cout << "w_q after exponential {"<<4<<","<<3 <<"}\n";
+    std::cout << "\nw_q after exponential {"<<4<<","<<3 <<"}\n"<<std::endl;
     printMatrix<<<1, 1>>>( 4,3, w_q.get());
     cudaDeviceSynchronize();
     std::cout << std::flush;
-
+    
     
     // 2.0) 2d kernel to broadcast
     dim3 threads2D(16,16);
