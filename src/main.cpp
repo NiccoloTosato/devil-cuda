@@ -1,3 +1,5 @@
+
+
 #include <cmath>
 #include <cstddef>
 #include<cuda.h>
@@ -9,12 +11,13 @@
 #include <string>
 #include <cusolverDn.h>
 #include "cutensor.h"
-#include "einsum.hpp"
 #include "inverse.hpp"
 #include "utils.hpp"
 #include <fstream>
 #include <vector>
 #include <chrono>
+#include "einsum.hpp"
+
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
@@ -181,7 +184,7 @@ int main() {
 
   tmp = nullptr;
 
-  /////////////////////////////////////////////////////////////
+
   cublasHandle_t cublasH;
   CUBLAS_CHECK(cublasCreate(&cublasH));
   cutensorHandle_t cutensorH;
@@ -193,13 +196,26 @@ int main() {
   CUTENSOR_CHECK(cutensorHandleResizePlanCache(cutensorH, numCachelines));
   cusolverDnHandle_t cusolverH;
   CUSOLVER_CHECK( cusolverDnCreate(&cusolverH) );
-  //////////////////////////////////////////////////////////////
+
+  EinsumWrapper einsumOffsetT{std::string{"ij->ji"}, {(int)genes, (int)cells},{}};
+  EinsumWrapper einsumCG_tmp2 {
+    std::string{"ik,jk->ij"}, {(int)cells, (int)features},
+    {(int)genes, (int)features}};
+
+  float *offsetT = einsumOffsetT.allocate();
+  float *cg_tmp2 = einsumCG_tmp2.allocate();
+  
+  einsumOffsetT.execute(cutensorH, offset.get(), nullptr);
+  offset.reset();
+
+
+/*
   //transpose something
     std::unique_ptr<float, CudaDeleter<float>> offsetT{(float *)general_einsum(
       cutensorH, {(int)genes, (int)cells}, {}, offset.get(), nullptr,
       std::string{"ij->ji"})}; // l'output ha shape GFF
-    offset.reset();
 
+  */
 
   float norm{999};
   std::size_t iter{0};
@@ -221,10 +237,11 @@ int main() {
 
 
     //cublasSgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, cells, genes, features, &alpha, X.get(), genes, mu_beta.get(), cells, &beta, cg_tmp.get(), cells);
-    float* cg_tmp2=(float *)general_einsum(
-									       cutensorH, {(int)cells, (int)features}, {(int)genes, (int)features},
-									       X.get(), mu_beta.get(),
-									       std::string{"ik,jk->ij"}); // l'output ha shape GFF
+    //    float *cg_tmp2 = (float *)general_einsum(
+    //  cutensorH, {(int)cells, (int)features}, {(int)genes, (int)features},
+    //   X.get(), mu_beta.get(),
+    //   std::string{"ik,jk->ij"}); // l'output ha shape GFF
+    einsumCG_tmp2.execute(cutensorH, X.get(), mu_beta.get());
     /*
     std::cout << "\nw_q before exponential {"<<cells<<","<<genes <<"}\n";
     //printMatrix<<<1, 1>>>(cells, genes, cg_tmp2.get());
@@ -239,9 +256,9 @@ int main() {
     //      C[x]=exp(-A[x]-B[x]);
     dim3 threads1D(256);
     dim3 blocks1D((genes*cells + threads1D.x - 1) / threads1D.x);
-    expGPU<<<blocks1D, threads1D>>>(cg_tmp2, offsetT.get(), w_q.get(),
+    expGPU<<<blocks1D, threads1D>>>(cg_tmp2, offsetT, w_q.get(),
                                     genes * cells);
-    CUDA_CHECK(cudaFree(cg_tmp2));
+    //CUDA_CHECK(cudaFree(cg_tmp2));
     /*
     std::cout << "\nw_q after exponential {"<<4<<","<<3 <<"}\n"<<std::endl;
     //printMatrix<<<1, 1>>>( 4,3, w_q.get());
