@@ -124,7 +124,7 @@ int main() {
   toGPU(X_host, X.get());
   std::cout << "X {"<<cells<<","<<features <<"}\n";
   //printMatrix<<<1, 1>>>(cells, features, X.get());
-  cudaDeviceSynchronize();
+  //  cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, cells*genes*sizeof(float)) );
@@ -134,7 +134,7 @@ int main() {
   
   std::cout << "Y {"<<genes<<","<<cells<<"}\n";
   //printMatrix<<<1, 1>>>( genes,cells, Y.get());
-  cudaDeviceSynchronize();
+  //  cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
@@ -144,7 +144,7 @@ int main() {
 
   std::cout << "offset {"<<genes<<","<<cells <<"}\n";
   //printMatrix<<<1, 1>>>( genes,cells, offset.get());
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   std::cout << std::flush;
 
   
@@ -155,7 +155,7 @@ int main() {
 
   std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
   // printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   std::cout << std::flush;
 
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*sizeof(float)) );
@@ -167,7 +167,7 @@ int main() {
 
   std::cout << "K {"<<genes<<","<<1 <<"}\n";
   //printMatrix<<<1, 1>>>( genes,1, k.get());
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
@@ -297,7 +297,8 @@ int main() {
     // 1.1) exponential kernel
     //      C[x]=exp(-A[x]-B[x]);
     dim3 threads1D(256);
-    dim3 blocks1D((genes*cells + threads1D.x - 1) / threads1D.x);
+    dim3 blocks1D((genes * cells + threads1D.x - 1) / threads1D.x);
+    
     expGPU<<<blocks1D, threads1D>>>(cg_tmp2, offsetT, w_q.get(),
                                     genes * cells);
     //CUDA_CHECK(cudaFree(cg_tmp2));
