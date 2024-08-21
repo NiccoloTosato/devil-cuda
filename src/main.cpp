@@ -256,6 +256,16 @@ int main() {
   float *Zigma;
   CUDA_CHECK(cudaMalloc(&Zigma, sizeof(float) * features * features * genes));
 
+  float **Zigma_pointer;
+  float **Bk_pointer;
+    
+  cudaMallocManaged(&Zigma_pointer, genes * sizeof(float*));
+  cudaMallocManaged(&Bk_pointer, genes * sizeof(float*));
+  for (int i = 0; i < genes; ++i) {
+    Zigma_pointer[i] = Zigma + features * features * i;
+    Bk_pointer[i]=Bk+features*features*i;
+  }
+
   while (iter < 500 && (norm/std::sqrt(genes*features))>0.00005) {
     ++iter;
     const float alpha{1.0f};
@@ -339,15 +349,6 @@ int main() {
     einsum_Bk.execute(cutensorH,B,k.get());
 
 
-    float **Zigma_pointer;
-    float **Bk_pointer;
-    
-    cudaMallocManaged(&Zigma_pointer, genes * sizeof(float*));
-    cudaMallocManaged(&Bk_pointer, genes * sizeof(float*));
-    for (int i = 0; i < genes; ++i) {
-      Zigma_pointer[i] = Zigma + features * features * i;
-      Bk_pointer[i]=Bk+features*features*i;
-    }
     
     inverseMatrix2(cublasH, Bk_pointer, Zigma_pointer, features ,genes);
     //for (int i = 0; i < features * features * genes;
