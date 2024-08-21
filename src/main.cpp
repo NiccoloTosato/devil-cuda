@@ -214,16 +214,29 @@ int main() {
                           {(int)genes, (int)features, (int)features},
                           {(int)genes}};
 
+  EinsumWrapper einsum_C{std::string{"cf,gc->gf"},
+                         {(int)cells, (int)features},
+                         {(int)genes, (int)cells}};
 
+  EinsumWrapper einsum_last{
+      std::string{"gk,gf->gf"}, {(int)genes, 1}, {(int)genes, (int)features}};
 
+  EinsumWrapper einsum_delta{std::string{"gfk,gk->gf"},
+                             {(int)genes, (int)features, (int)features},
+                             {(int)genes, (int)features}};
+  
+  
+  
 
   float* w_qT=einsum_w_qT.allocate();
   float *offsetT = einsum_offsetT.allocate();
   float *cg_tmp2 = einsum_cg_tmp2.allocate();
   float *A = einsum_A.allocate();
   float *B = einsum_B.allocate();
+  float *C = einsum_C.allocate();
   float* Bk = einsum_Bk.allocate();
-  
+  float *delta = einsum_delta.allocate();
+  float* last=einsum_last.allocate();
   einsum_offsetT.execute(cutensorH, offset.get(), nullptr);
   offset.reset();
 
@@ -320,7 +333,6 @@ int main() {
       create A
       A=torch.einsum('fc,gc->gfc',X.t(), wq_mug);
     */
-    float* A=(float *)general_einsum(cutensorH, {(int)cells,(int) features}, {(int) genes, (int)cells},X.get(), mu_g.get(), std::string{"cf,gc->gfc"});
 
     einsum_A.execute(cutensorH, X.get(), mu_g.get());
     einsum_B.execute(cutensorH, A, X.get());
@@ -353,27 +365,19 @@ int main() {
 
     //please check again the shape
     elementWiseSub<<<blocks1D,threads1D>>>(mu_g.get(), genes*cells);
-    float* C=(float *)general_einsum(
-        cutensorH, {(int)cells, (int)features}, {(int)genes, (int)cells},
-        X.get(), mu_g.get(), std::string{"cf,gc->gf"}); // C e' genes*features
-                                                         //
-    float* last=(float *)general_einsum(
-        cutensorH, {(int)genes, 1}, {(int)genes, (int)features},
-        k.get(), C, std::string{"gk,gf->gf"}); // C e' genes*features
+
+    einsum_C.execute(cutensorH,X.get(),mu_g.get()); 
+    einsum_last.execute(cutensorH,k.get(),C);
+    einsum_delta.execute(cutensorH,Zigma,last);
 
 
-    float* delta=(float *)general_einsum( cutensorH, {(int)genes, (int) features,(int) features}, {(int)genes, (int)features},
-        Zigma, last, std::string{"gfk,gk->gf"}); // C e' genes*features
-    CUDA_CHECK(cudaFree(last));
-    CUDA_CHECK(cudaFree(C));
+
 
       final1D<<<blocks1D,threads1D>>>(mu_beta.get(),delta,genes*features);
       // delta = torch.einsum('gfk,gk->gf', Zigma, k * C)
 
       cublasSnrm2(cublasH, genes * features, delta, 1, &norm);
       //      std::cout << "Norm " << norm/std::sqrt(genes*features)<< std::endl;
-
-      CUDA_CHECK(cudaFree(delta));
     /*
     //facile, chiamare inversa su tutto B per N volte
       Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte, si per
