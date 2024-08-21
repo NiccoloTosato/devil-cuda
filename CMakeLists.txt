@@ -34,7 +34,7 @@ set_source_files_properties(src/inverse.cpp PROPERTIES LANGUAGE CUDA)
 set_source_files_properties(src/main.cpp PROPERTIES LANGUAGE CUDA)
 
 
-add_executable(main.x src/main.cpp src/inverse.cpp src/einsum.cpp)
+add_executable(main.x src/main.cpp src/inverse.cpp src/einsum.cpp src/inverse.cpp)
 add_executable(test.x src/test.cpp src/inverse.cpp src/einsum.cpp)
 
 target_link_libraries(main.x CUDA::cudart CUDA::cublas CUDA::cusolver cutensor)
