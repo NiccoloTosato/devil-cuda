@@ -10,6 +10,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_COMPILER nvcc)
 set(CMAKE_CUDA_ARCHITECTURES "72")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
 include(FetchContent)
 FetchContent_Declare(
   googletest
