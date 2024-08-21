@@ -202,11 +202,27 @@ int main() {
     std::string{"ik,jk->ij"}, {(int)cells, (int)features},
     {(int)genes, (int)features}};
   EinsumWrapper einsum_w_qT { std::string{"ij->ji"}, {(int)cells, (int)genes}, {}};
+  EinsumWrapper einsum_A{std::string{"cf,gc->gfc"},
+                         {(int)cells, (int)features},
+                         {(int)genes, (int)cells}};
+  EinsumWrapper einsum_B{
+      std::string{"gfc,ck->gfk"},
+      {(int)genes, (int)features, (int)cells},
+      {(int)cells, (int)features},
+  };
+  EinsumWrapper einsum_Bk{std::string{"gfc,g->gfc"},
+                          {(int)genes, (int)features, (int)features},
+                          {(int)genes}};
+
+
 
 
   float* w_qT=einsum_w_qT.allocate();
   float *offsetT = einsum_offsetT.allocate();
   float *cg_tmp2 = einsum_cg_tmp2.allocate();
+  float *A = einsum_A.allocate();
+  float *B = einsum_B.allocate();
+  float* Bk = einsum_Bk.allocate();
   
   einsum_offsetT.execute(cutensorH, offset.get(), nullptr);
   offset.reset();
@@ -306,19 +322,10 @@ int main() {
     */
     float* A=(float *)general_einsum(cutensorH, {(int)cells,(int) features}, {(int) genes, (int)cells},X.get(), mu_g.get(), std::string{"cf,gc->gfc"});
 
-    /*
-      bisogna capire che fa il k.unsqueeze ?
-      B=torch.einsum('gfc,ck->gfk', A , X) * k.unsqueeze(1);
-    */
-    
-    float* B =
-      (float *)general_einsum(cutensorH,
-                              {(int) genes,(int) features, (int)cells}, {(int)cells,(int)features}, A, X.get(), std::string{"gfc,ck->gfk"}); //l'output ha shape GFF
+    einsum_A.execute(cutensorH, X.get(), mu_g.get());
+    einsum_B.execute(cutensorH, A, X.get());
+    einsum_Bk.execute(cutensorH,B,k.get());
 
-    
-    float* Bk=(float *)general_einsum(cutensorH, {(int) genes,(int) features, (int)features}, {(int)genes}, B, k.get(), std::string{"gfc,g->gfc"}); // ouput ha shape GF
-    CUDA_CHECK(cudaFree(B));
-    CUDA_CHECK(cudaFree(A));
 
     float **Zigma_pointer;
     float **Bk_pointer;
@@ -343,7 +350,7 @@ int main() {
       */
     //}
 
-    CUDA_CHECK(cudaFree(Bk));
+
     //please check again the shape
     elementWiseSub<<<blocks1D,threads1D>>>(mu_g.get(), genes*cells);
     float* C=(float *)general_einsum(
