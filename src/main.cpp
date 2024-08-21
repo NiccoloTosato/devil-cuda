@@ -197,15 +197,18 @@ int main() {
   cusolverDnHandle_t cusolverH;
   CUSOLVER_CHECK( cusolverDnCreate(&cusolverH) );
 
-  EinsumWrapper einsumOffsetT{std::string{"ij->ji"}, {(int)genes, (int)cells},{}};
-  EinsumWrapper einsumCG_tmp2 {
+  EinsumWrapper einsum_offsetT{std::string{"ij->ji"}, {(int)genes, (int)cells},{}};
+  EinsumWrapper einsum_cg_tmp2 {
     std::string{"ik,jk->ij"}, {(int)cells, (int)features},
     {(int)genes, (int)features}};
+  EinsumWrapper einsum_w_qT { std::string{"ij->ji"}, {(int)cells, (int)genes}, {}};
 
-  float *offsetT = einsumOffsetT.allocate();
-  float *cg_tmp2 = einsumCG_tmp2.allocate();
+
+  float* w_qT=einsum_w_qT.allocate();
+  float *offsetT = einsum_offsetT.allocate();
+  float *cg_tmp2 = einsum_cg_tmp2.allocate();
   
-  einsumOffsetT.execute(cutensorH, offset.get(), nullptr);
+  einsum_offsetT.execute(cutensorH, offset.get(), nullptr);
   offset.reset();
 
 
@@ -241,7 +244,7 @@ int main() {
     //  cutensorH, {(int)cells, (int)features}, {(int)genes, (int)features},
     //   X.get(), mu_beta.get(),
     //   std::string{"ik,jk->ij"}); // l'output ha shape GFF
-    einsumCG_tmp2.execute(cutensorH, X.get(), mu_beta.get());
+    einsum_cg_tmp2.execute(cutensorH, X.get(), mu_beta.get());
     /*
     std::cout << "\nw_q before exponential {"<<cells<<","<<genes <<"}\n";
     //printMatrix<<<1, 1>>>(cells, genes, cg_tmp2.get());
@@ -265,10 +268,8 @@ int main() {
     cudaDeviceSynchronize();
     std::cout << std::flush;
     */
-    float* w_qT=
-        (float *)general_einsum(cutensorH, {(int)cells, (int)genes}, {},
-                                w_q.get(), nullptr, std::string{"ij->ji"});
-    /*
+    einsum_w_qT.execute(cutensorH,w_q.get(),nullptr);
+/*
     std::cout << "\nw_q after transpose {"<<3<<","<<4 <<"}\n"<<std::endl;
     //printMatrix<<<1, 1>>>( 3,4, w_qT.get());
     cudaDeviceSynchronize();
@@ -290,7 +291,7 @@ int main() {
     
     // 3.0) elementwise multiplication
     elementWise<<<blocks1D, threads1D>>>(mu_g.get(), w_qT, genes * cells);
-    CUDA_CHECK(cudaFree(w_qT));
+  
     /*
     std::cout << "\nmu_g after elementwise {"<<genes<<","<<cells<<"}\n"<<std::endl;
     //printMatrix<<<1, 1>>>( genes,cells, mu_g.get());
