@@ -59,6 +59,47 @@ void invertExact(std::vector<float> vec_exact,std::vector<float> vec_inverse_exa
   CUDA_CHECK( cudaFree(vec_inverse) );
 }
 
+void invertExactBatch(std::vector<float> vec_exact,std::vector<float> vec_inverse_exact,int col) {
+  int batchSize=2;
+  float *vec;
+  float *vec_inverse;
+
+  float **vec_pointer;
+  float **vec_inverse_pointer;
+
+  int col2 = col * col;
+  //alloc su device la memoria
+  CUDA_CHECK(cudaMallocManaged(&vec, col2 * sizeof(float) * batchSize));
+  CUDA_CHECK(cudaMallocManaged(&vec_inverse, col2 * sizeof(float) * batchSize));
+  //alloco array di matrici
+  CUDA_CHECK(cudaMallocManaged(&vec_pointer, sizeof(float *) * batchSize));
+  CUDA_CHECK(cudaMallocManaged(&vec_inverse_pointer, sizeof(float*) * batchSize));
+
+
+
+  for (int j =0;j<batchSize;++j) {
+    for (int i = 0; i < col2; ++i)
+      vec[i + j * col2] = vec_exact[i];
+    vec_inverse_pointer[j] = vec_inverse + j * col2;
+    vec_pointer[j]=vec+j*col2;
+  }
+  
+
+  
+  CUDA_CHECK(cudaDeviceSynchronize());
+  cublasHandle_t cublasH;
+  cublasCreate(&cublasH);
+  inverseMatrix2(cublasH, vec_pointer, vec_inverse_pointer, col ,batchSize ) ;
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  for(int j=0;j<batchSize;++j) {
+  for(int i=0;i<col2;++i) 
+    EXPECT_NEAR(vec_inverse[i+j*col2], vec_inverse_exact[i], 2E-6);
+  }
+  CUDA_CHECK( cudaFree(vec) );
+  CUDA_CHECK( cudaFree(vec_inverse) );
+}
+
 float* einSum(std::vector<float> a, std::vector<int> a_shape,
             std::vector<float> b, std::vector<int> b_shape,
             std::string s) {
@@ -292,6 +333,7 @@ TEST(InvertMatrix, Exact2X2) {
               std::vector<float>{-2.0f, 3.0f, 3.0f, -4.0f},
               2);
 };
+
 TEST(InvertMatrix, Exact3X3) {
   invertExact(
       std::vector<float>{2.0f, 0.0f, -1.0f, 5.0f, 1.0f, 0.0f, 0.0f, 1.0f, 3.0f},
@@ -299,6 +341,15 @@ TEST(InvertMatrix, Exact3X3) {
                                -5.0f, 5.0f,  -2.0f, 2.0f},
       3);
 };
+
+TEST(InvertMatrix, Exact3X3Batch) {
+  invertExactBatch(
+      std::vector<float>{2.0f, 0.0f, -1.0f, 5.0f, 1.0f, 0.0f, 0.0f, 1.0f, 3.0f},
+      std::vector<float>{3.0f,  -1.0f, 1.0f,  -15.0f, 6.0f,
+                               -5.0f, 5.0f,  -2.0f, 2.0f},
+      3);
+};
+
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
