@@ -10,20 +10,19 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <cusolverDn.h>
 #include "einsum.hpp"
 #include "kernel.h"
 #include "inverse.hpp"
 #include "utils.hpp"
 #include "cutensor.h"
+
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
         cudaFree(ptr);
     }
 };
-
-
-
 
 std::vector<float> readDatFile(const std::string& filename) {
   std::ifstream file(filename, std::ios::binary);
@@ -64,7 +63,6 @@ __global__ void printMatrixT(int rows, int cols, float* matrix) {
         printf("\n");
     }
 }
-
 
 void toGPU(std::vector<float> &vec, float* vec_gpu) {
   CUDA_CHECK( cudaMemcpy(vec_gpu, vec.data(), vec.size() * sizeof(float), cudaMemcpyHostToDevice) );
@@ -183,8 +181,10 @@ int main() {
   EinsumWrapper einsum_delta{ std::string{"gfk,gk->gf"},
 			      {(int)genes, (int)features, (int)features},
 			      {(int)genes, (int)features}};
-  
 
+  /******************************
+   * This allocate the workspace and the output tensor
+   ******************************/
   float* w_qT=einsum_w_qT.allocate();
   float *offsetT = einsum_offsetT.allocate();
   float *cg_tmp2 = einsum_cg_tmp2.allocate();
@@ -195,36 +195,34 @@ int main() {
   float *delta = einsum_delta.allocate();
   float* last=einsum_last.allocate();
   einsum_offsetT.execute(cutensorH, offset.get(), nullptr);
+  //free offset memory after transposition
   offset.reset();
 
+  
 
-/*
-  //transpose something
-    std::unique_ptr<float, CudaDeleter<float>> offsetT{(float *)general_einsum(
-      cutensorH, {(int)genes, (int)cells}, {}, offset.get(), nullptr,
-      std::string{"ij->ji"})}; // l'output ha shape GFF
+  /******************************
+   * Allocate Zigma, The array of pointer to Zigma and Bk
+   ******************************/
+  float **Zigma_pointer;
+  float **Bk_pointer; 
+  float *Zigma;
+  //Use Managed memory to simply set the addresses
+  CUDA_CHECK(cudaMallocManaged(&Zigma_pointer, genes * sizeof(float*)) );
+  CUDA_CHECK(cudaMallocManaged(&Bk_pointer, genes * sizeof(float*)) );
+  CUDA_CHECK(cudaMalloc(&Zigma, sizeof(float) * features * features * genes));
+  for (int i = 0; i < genes; ++i) {
+    Zigma_pointer[i] = Zigma + features * features * i;
+    Bk_pointer[i] = Bk + features * features * i;
+  }
 
-  */
-
-  float norm{999};
+  /******************************
+   * Initialize norm s.t. the initial check is always True , set iter to 0, measure start time.
+   ******************************/
+  float norm{std::sqrt(genes*features)};
   std::size_t iter{0};
   auto t1 = std::chrono::high_resolution_clock::now();
 
-  float *Zigma;
-  CUDA_CHECK(cudaMalloc(&Zigma, sizeof(float) * features * features * genes));
-
-  float **Zigma_pointer;
-  float **Bk_pointer;
-    
-  cudaMallocManaged(&Zigma_pointer, genes * sizeof(float*));
-  cudaMallocManaged(&Bk_pointer, genes * sizeof(float*));
-
-  for (int i = 0; i < genes; ++i) {
-    Zigma_pointer[i] = Zigma + features * features * i;
-    Bk_pointer[i]=Bk+features*features*i;
-  }
-
-  while (iter < 1000 && (norm/std::sqrt(genes*features)) > 1E-6) {
+  while (iter < 8000 && (norm/std::sqrt(genes*features)) > 1E-12) {
     ++iter;
     einsum_cg_tmp2.execute(cutensorH, X.get(), mu_beta.get());
     dim3 threads1D(256);
@@ -248,10 +246,10 @@ int main() {
     einsum_delta.execute(cutensorH,Zigma,last);
     final1D<<<blocks1D,threads1D>>>(mu_beta.get(),delta,genes*features);
     cublasSnrm2(cublasH, genes * features, delta, 1, &norm);
-    std::cout << "Norm " << norm/std::sqrt(genes*features)<< std::endl;
+    //std::cout << "Norm " << norm/std::sqrt(genes*features)<< std::endl;
   }
+  auto t2 = std::chrono::high_resolution_clock::now();
   CUDA_CHECK(cudaFree(Zigma));
-
   CUDA_CHECK(cudaFree(w_qT));
   CUDA_CHECK(cudaFree(offsetT));
   CUDA_CHECK(cudaFree(cg_tmp2));
@@ -262,14 +260,12 @@ int main() {
   CUDA_CHECK(cudaFree(delta));
   CUDA_CHECK(cudaFree(last));
 
-
-
   std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
   printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
   cudaDeviceSynchronize();
   std::cout << std::flush;
   std::cout << "Norm " << norm / std::sqrt(genes * features) << std::endl;
-  auto t2 = std::chrono::high_resolution_clock::now();
+
   auto elapsed{t2-t1};
   std::cout<<std::chrono::duration<double,std::milli>(elapsed).count() / iter << " ms [avg iter time]"<<std::endl;
 
