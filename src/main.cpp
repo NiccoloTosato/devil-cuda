@@ -72,7 +72,6 @@ std::vector<float> readDatFile(const std::string& filename) {
   file.seekg(0, std::ios::end);
   std::streamsize size = file.tellg();
   file.seekg(0, std::ios::beg);
-
   // Read the data
   std::vector<float> data(size / sizeof(float));
   if (file.read(reinterpret_cast<char *>(data.data()), size)) {
@@ -87,7 +86,7 @@ std::vector<float> readDatFile(const std::string& filename) {
 __global__ void printMatrix(int rows, int cols, float* matrix) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-	  printf("%2.3f ", matrix[i*cols+j]);
+	  printf("%2.4f ", matrix[i*cols+j]);
         }
         printf("\n");
     }
@@ -124,7 +123,7 @@ int main() {
   toGPU(X_host, X.get());
   std::cout << "X {"<<cells<<","<<features <<"}\n";
   //printMatrix<<<1, 1>>>(cells, features, X.get());
-  //  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, cells*genes*sizeof(float)) );
@@ -134,7 +133,7 @@ int main() {
   
   std::cout << "Y {"<<genes<<","<<cells<<"}\n";
   //printMatrix<<<1, 1>>>( genes,cells, Y.get());
-  //  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
@@ -154,7 +153,7 @@ int main() {
   toGPU(mu_beta_host, mu_beta.get());
 
   std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
-  // printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
+  //printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
   //cudaDeviceSynchronize();
   std::cout << std::flush;
 
@@ -181,10 +180,7 @@ int main() {
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> mu_g{tmp};
   cudaMemset(mu_g.get(), 0, genes*cells*sizeof(float));
-
   tmp = nullptr;
-
-
   cublasHandle_t cublasH;
   CUBLAS_CHECK(cublasCreate(&cublasH));
   cutensorHandle_t cutensorH;
@@ -225,8 +221,6 @@ int main() {
                              {(int)genes, (int)features, (int)features},
                              {(int)genes, (int)features}};
   
-  
-  
 
   float* w_qT=einsum_w_qT.allocate();
   float *offsetT = einsum_offsetT.allocate();
@@ -261,136 +255,52 @@ int main() {
     
   cudaMallocManaged(&Zigma_pointer, genes * sizeof(float*));
   cudaMallocManaged(&Bk_pointer, genes * sizeof(float*));
+
   for (int i = 0; i < genes; ++i) {
     Zigma_pointer[i] = Zigma + features * features * i;
     Bk_pointer[i]=Bk+features*features*i;
   }
 
-  while (iter < 500 && (norm/std::sqrt(genes*features))>0.00005) {
+  while (iter < 500 && (norm/std::sqrt(genes*features)) > 1E-6) {
     ++iter;
-    const float alpha{1.0f};
-    const float beta{0.0f};
-
-
-    // 1.0) sgemm
-    //cublasSgemm(cublasH, CUBLAS_OP_T, CUBLAS_OP_N, genes, cells, features,
-    //  &alpha, mu_beta.get(), genes, X.get(), features, &beta, cg_tmp.get(),   genes);
-
-
-
-    //cublasSgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, cells, genes, features, &alpha, X.get(), genes, mu_beta.get(), cells, &beta, cg_tmp.get(), cells);
-    //    float *cg_tmp2 = (float *)general_einsum(
-    //  cutensorH, {(int)cells, (int)features}, {(int)genes, (int)features},
-    //   X.get(), mu_beta.get(),
-    //   std::string{"ik,jk->ij"}); // l'output ha shape GFF
     einsum_cg_tmp2.execute(cutensorH, X.get(), mu_beta.get());
-    /*
-    std::cout << "\nw_q before exponential {"<<cells<<","<<genes <<"}\n";
-    //printMatrix<<<1, 1>>>(cells, genes, cg_tmp2.get());
-
-    cudaDeviceSynchronize();
-    std::cout << std::flush;
-    */
-
-    
-	  
-    // 1.1) exponential kernel
-    //      C[x]=exp(-A[x]-B[x]);
     dim3 threads1D(256);
     dim3 blocks1D((genes * cells + threads1D.x - 1) / threads1D.x);
-    
     expGPU<<<blocks1D, threads1D>>>(cg_tmp2, offsetT, w_q.get(),
                                     genes * cells);
-    //CUDA_CHECK(cudaFree(cg_tmp2));
-    /*
-    std::cout << "\nw_q after exponential {"<<4<<","<<3 <<"}\n"<<std::endl;
-    //printMatrix<<<1, 1>>>( 4,3, w_q.get());
-    cudaDeviceSynchronize();
-    std::cout << std::flush;
-    */
     einsum_w_qT.execute(cutensorH,w_q.get(),nullptr);
-/*
-    std::cout << "\nw_q after transpose {"<<3<<","<<4 <<"}\n"<<std::endl;
-    //printMatrix<<<1, 1>>>( 3,4, w_qT.get());
-    cudaDeviceSynchronize();
-    std::cout << std::flush;
-    */
-    // 2.0) 2d kernel to broadcast
     dim3 threads2D(16,16);
     dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
                   (genes + threads2D.y - 1) / threads2D.y);
-
     process2D<<<blocks2D, threads2D>>>(k.get(), Y.get(), w_qT, mu_g.get(),
                                        genes, cells);
-    /*
-    std::cout << "\nmu_g after 2D process {"<<genes<<","<<cells<<"}\n"<<std::endl;
-    //printMatrix<<<1, 1>>>( genes,cells, mu_g.get());
-    cudaDeviceSynchronize();
-    std::cout << std::flush;
-    */
-    
-    // 3.0) elementwise multiplication
     elementWise<<<blocks1D, threads1D>>>(mu_g.get(), w_qT, genes * cells);
-  
-    /*
-    std::cout << "\nmu_g after elementwise {"<<genes<<","<<cells<<"}\n"<<std::endl;
-    //printMatrix<<<1, 1>>>( genes,cells, mu_g.get());
-    cudaDeviceSynchronize();
-    std::cout << std::flush;
-    */
-    
-
-    /*
-      create A
-      A=torch.einsum('fc,gc->gfc',X.t(), wq_mug);
-    */
-
     einsum_A.execute(cutensorH, X.get(), mu_g.get());
     einsum_B.execute(cutensorH, A, X.get());
     einsum_Bk.execute(cutensorH,B,k.get());
-
-
-    
     inverseMatrix2(cublasH, Bk_pointer, Zigma_pointer, features ,genes);
-    //for (int i = 0; i < features * features * genes;
-    //   i = i + features * features) {
-      //sto for qui poi lo spignamo bene bene coi strim
-      //inverseMatrix(cusolverH, Bk + i, Zigma + i, (int)features);
-      /*
-      std::cout << "\nZigma inversion {"<<2<<","<<2<<"}\n"<<std::endl;
-      printMatrix<<<1, 1>>>( 2,2, Zigma+i);
-      cudaDeviceSynchronize();
-    std::cout << std::flush;
-      */
-    //}
-
-
-    //please check again the shape
     elementWiseSub<<<blocks1D,threads1D>>>(mu_g.get(), genes*cells);
-
     einsum_C.execute(cutensorH,X.get(),mu_g.get()); 
     einsum_last.execute(cutensorH,k.get(),C);
     einsum_delta.execute(cutensorH,Zigma,last);
-
-
-
-
-      final1D<<<blocks1D,threads1D>>>(mu_beta.get(),delta,genes*features);
-      // delta = torch.einsum('gfk,gk->gf', Zigma, k * C)
-
-      cublasSnrm2(cublasH, genes * features, delta, 1, &norm);
-      //      std::cout << "Norm " << norm/std::sqrt(genes*features)<< std::endl;
-    /*
-    //facile, chiamare inversa su tutto B per N volte
-      Zigma = torch.inverse(B); // ma e' l'inversa calcolata piu volte, si per
-ogni gene !!!
-      
-      init_beta += delta //easy
-      converged = torch.max(abs(delta)) < eps //usa la norma
-     */
+    final1D<<<blocks1D,threads1D>>>(mu_beta.get(),delta,genes*features);
+    cublasSnrm2(cublasH, genes * features, delta, 1, &norm);
+    std::cout << "Norm " << norm/std::sqrt(genes*features)<< std::endl;
   }
   CUDA_CHECK(cudaFree(Zigma));
-  
+
+  CUDA_CHECK(cudaFree(w_qT));
+  CUDA_CHECK(cudaFree(offsetT));
+  CUDA_CHECK(cudaFree(cg_tmp2));
+  CUDA_CHECK(cudaFree(A));
+  CUDA_CHECK(cudaFree(B));
+  CUDA_CHECK(cudaFree(C));
+  CUDA_CHECK(cudaFree(Bk));
+  CUDA_CHECK(cudaFree(delta));
+  CUDA_CHECK(cudaFree(last));
+
+
+
   std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
   printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
   cudaDeviceSynchronize();
