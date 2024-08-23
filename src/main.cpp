@@ -1,23 +1,20 @@
-
-
 #include <cmath>
 #include <cstddef>
-#include<cuda.h>
-#include <cuda_runtime.h>
-#include <cublas_v2.h>
 #include <iostream>
 #include <memory>
 #include <ostream>
 #include <string>
-#include <cusolverDn.h>
-#include "cutensor.h"
-#include "inverse.hpp"
-#include "utils.hpp"
 #include <fstream>
 #include <vector>
 #include <chrono>
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include "einsum.hpp"
-
+#include "kernel.h"
+#include "inverse.hpp"
+#include "utils.hpp"
+#include "cutensor.h"
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
@@ -25,41 +22,8 @@ struct CudaDeleter {
     }
 };
 
-__global__ void expGPU(float *A, float *B,float *C,std::size_t elem_count) {
-    int x = blockDim.x * blockIdx.x + threadIdx.x;
-    if (x < elem_count) {
-      //printf("TH id %d %f \n",x,A[x]);
-      C[x] = exp(-A[x] - B[x]);
-    }
-}
 
-__global__ void process2D(float *k, float* Y,float* w_q,float* mu_g, int genes, int cells) {
-  const int i = blockIdx.y * blockDim.y + threadIdx.y;
-  const int j = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    if (i < genes && j < cells) {
-      const int ij = i * cells + j;
-      mu_g[ij] =( k[i]+Y[ij] )/( 1+(k[i]*w_q[ij]) );
-    }
-}
 
-__global__ void elementWise(float *mu_g, float *w_g, std::size_t elem_count) {
-    int x = blockDim.x * blockIdx.x + threadIdx.x;
-    if(x<elem_count)
-      mu_g[x]=mu_g[x]*w_g[x];
-}
-
-__global__ void elementWiseSub(float *mu_g, std::size_t elem_count) {
-    int x = blockDim.x * blockIdx.x + threadIdx.x;
-    if(x<elem_count)
-      mu_g[x]=mu_g[x]-1;
-}
-
-__global__ void final1D(float *mu_beta,float* delta, std::size_t elem_count) {
-    int x = blockDim.x * blockIdx.x + threadIdx.x;
-    if(x<elem_count)
-      mu_beta[x]=mu_beta[x]+delta[x];
-}
 
 std::vector<float> readDatFile(const std::string& filename) {
   std::ifstream file(filename, std::ios::binary);
@@ -109,41 +73,41 @@ void toGPU(std::vector<float> &vec, float* vec_gpu) {
 int main() {
   float* tmp=nullptr;
 
+  /******************************
+   * Shape definition 
+   ******************************/
   std::size_t genes{64};
   std::size_t cells{1024};
   std::size_t features{2};
-  /*
+
+  /* small debug files in ../data-debug/
   std::size_t genes{3};
   std::size_t cells{4};
   std::size_t features{2};
   */
+
+  /******************************
+   * Allocate GPU memory, read data and move to GPU. 
+   ******************************/
   CUDA_CHECK( cudaMalloc((void**)&tmp, features*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> X{tmp};
   auto X_host = readDatFile("../data/X.dat");
   toGPU(X_host, X.get());
   std::cout << "X {"<<cells<<","<<features <<"}\n";
-  //printMatrix<<<1, 1>>>(cells, features, X.get());
-  //cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, cells*genes*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> Y{tmp};
   auto Y_host = readDatFile("../data/Y.dat");
   toGPU(Y_host, Y.get());
-  
   std::cout << "Y {"<<genes<<","<<cells<<"}\n";
-  //printMatrix<<<1, 1>>>( genes,cells, Y.get());
-  //cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> offset{tmp};
   auto offset_host = readDatFile("../data/off.dat");
   toGPU(offset_host, offset.get());
-
   std::cout << "offset {"<<genes<<","<<cells <<"}\n";
-  //printMatrix<<<1, 1>>>( genes,cells, offset.get());
-  //cudaDeviceSynchronize();
   std::cout << std::flush;
 
   
@@ -151,10 +115,7 @@ int main() {
   std::unique_ptr<float, CudaDeleter<float>> mu_beta{tmp};
   auto mu_beta_host = readDatFile("../data/mu_beta.dat");
   toGPU(mu_beta_host, mu_beta.get());
-
   std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
-  //printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
-  //cudaDeviceSynchronize();
   std::cout << std::flush;
 
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*sizeof(float)) );
@@ -163,10 +124,7 @@ int main() {
   for (auto &x : k_host)
     x=1/x;
   toGPU(k_host, k.get());
-
   std::cout << "K {"<<genes<<","<<1 <<"}\n";
-  //printMatrix<<<1, 1>>>( genes,1, k.get());
-  //cudaDeviceSynchronize();
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
@@ -181,45 +139,50 @@ int main() {
   std::unique_ptr<float,CudaDeleter<float>> mu_g{tmp};
   cudaMemset(mu_g.get(), 0, genes*cells*sizeof(float));
   tmp = nullptr;
+
+  /******************************
+   * Create handlers and setup
+   ******************************/
   cublasHandle_t cublasH;
   CUBLAS_CHECK(cublasCreate(&cublasH));
   cutensorHandle_t cutensorH;
   CUTENSOR_CHECK( cutensorCreate(&cutensorH) );
-  /**********************
-   * Setup planCache (optional)
-   **********************/
   constexpr int32_t numCachelines = 1024;
   CUTENSOR_CHECK(cutensorHandleResizePlanCache(cutensorH, numCachelines));
-  cusolverDnHandle_t cusolverH;
-  CUSOLVER_CHECK( cusolverDnCreate(&cusolverH) );
-
-  EinsumWrapper einsum_offsetT{std::string{"ij->ji"}, {(int)genes, (int)cells},{}};
-  EinsumWrapper einsum_cg_tmp2 {
-    std::string{"ik,jk->ij"}, {(int)cells, (int)features},
-    {(int)genes, (int)features}};
-  EinsumWrapper einsum_w_qT { std::string{"ij->ji"}, {(int)cells, (int)genes}, {}};
-  EinsumWrapper einsum_A{std::string{"cf,gc->gfc"},
+  //cusolverDnHandle_t cusolverH;
+  //CUSOLVER_CHECK( cusolverDnCreate(&cusolverH) );
+  
+  /******************************
+   * Initialize tensor product
+   ******************************/
+  EinsumWrapper einsum_offsetT { std::string{"ij->ji"},
+				 {(int)genes, (int)cells},
+				 {}};
+  EinsumWrapper einsum_cg_tmp2 {std::string{"ik,jk->ij"},
+				{(int)cells, (int)features},
+				{(int)genes, (int)features}};
+  EinsumWrapper einsum_w_qT { std::string{"ij->ji"},
+			      {(int)cells, (int)genes},
+			      {}};
+  EinsumWrapper einsum_A{ std::string{"cf,gc->gfc"},
                          {(int)cells, (int)features},
                          {(int)genes, (int)cells}};
-  EinsumWrapper einsum_B{
-      std::string{"gfc,ck->gfk"},
-      {(int)genes, (int)features, (int)cells},
-      {(int)cells, (int)features},
-  };
-  EinsumWrapper einsum_Bk{std::string{"gfc,g->gfc"},
+  EinsumWrapper einsum_B{ std::string{"gfc,ck->gfk"},
+			  {(int)genes, (int)features, (int)cells},
+			  {(int)cells, (int)features}};
+  EinsumWrapper einsum_Bk{ std::string{"gfc,g->gfc"},
                           {(int)genes, (int)features, (int)features},
                           {(int)genes}};
 
-  EinsumWrapper einsum_C{std::string{"cf,gc->gf"},
-                         {(int)cells, (int)features},
-                         {(int)genes, (int)cells}};
-
-  EinsumWrapper einsum_last{
-      std::string{"gk,gf->gf"}, {(int)genes, 1}, {(int)genes, (int)features}};
-
-  EinsumWrapper einsum_delta{std::string{"gfk,gk->gf"},
-                             {(int)genes, (int)features, (int)features},
-                             {(int)genes, (int)features}};
+  EinsumWrapper einsum_C{ std::string{"cf,gc->gf"},
+			  {(int)cells, (int)features},
+			  {(int)genes, (int)cells}};
+  EinsumWrapper einsum_last { std::string{"gk,gf->gf"},
+			      {(int)genes, 1},
+			      {(int)genes, (int)features}};
+  EinsumWrapper einsum_delta{ std::string{"gfk,gk->gf"},
+			      {(int)genes, (int)features, (int)features},
+			      {(int)genes, (int)features}};
   
 
   float* w_qT=einsum_w_qT.allocate();
@@ -261,7 +224,7 @@ int main() {
     Bk_pointer[i]=Bk+features*features*i;
   }
 
-  while (iter < 500 && (norm/std::sqrt(genes*features)) > 1E-6) {
+  while (iter < 1000 && (norm/std::sqrt(genes*features)) > 1E-6) {
     ++iter;
     einsum_cg_tmp2.execute(cutensorH, X.get(), mu_beta.get());
     dim3 threads1D(256);

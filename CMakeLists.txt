@@ -12,6 +12,7 @@ set(CMAKE_CUDA_ARCHITECTURES "72")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
+
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -34,10 +35,11 @@ link_directories( ~/.local/lib/cutensor)
 
 set_source_files_properties(src/inverse.cpp PROPERTIES LANGUAGE CUDA)
 set_source_files_properties(src/main.cpp PROPERTIES LANGUAGE CUDA)
+#set_source_files_properties(src/kernel.cpp PROPERTIES LANGUAGE CUDA)
 
 
-add_executable(main.x src/main.cpp src/inverse.cpp src/inverse.cpp)
-add_executable(test.x src/test.cpp src/inverse.cpp  )
+add_executable(main.x src/main.cpp src/kernel.cu src/inverse.cpp)
+add_executable(test.x src/test.cpp src/inverse.cpp)
 
 target_link_libraries(main.x CUDA::cudart CUDA::cublas CUDA::cusolver cutensor)
 target_link_libraries(test.x gtest_main CUDA::cudart CUDA::cusolver cutensor)
