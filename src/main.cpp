@@ -30,7 +30,6 @@ std::vector<float> readDatFile(const std::string& filename) {
     std::cerr << "Unable to open file " << filename << std::endl;
     return {};
   }
-
   // Get the file size
   file.seekg(0, std::ios::end);
   std::streamsize size = file.tellg();
@@ -46,7 +45,7 @@ std::vector<float> readDatFile(const std::string& filename) {
   }
 }
 
-__global__ void printMatrix(int rows, int cols, float* matrix) {
+__global__ void printMatrix(const int rows,const int cols, float* const matrix) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
 	  printf("%2.4f ", matrix[i*cols+j]);
@@ -55,7 +54,7 @@ __global__ void printMatrix(int rows, int cols, float* matrix) {
     }
 }
 
-__global__ void printMatrixT(int rows, int cols, float* matrix) {
+__global__ void printMatrixT(const int rows,const int cols, float* const matrix) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
 	  printf("%2.3f ", matrix[j*rows+i]);
@@ -64,19 +63,18 @@ __global__ void printMatrixT(int rows, int cols, float* matrix) {
     }
 }
 
-void toGPU(std::vector<float> &vec, float* vec_gpu) {
+void toGPU(const std::vector<float> &vec,float* const vec_gpu) {
   CUDA_CHECK( cudaMemcpy(vec_gpu, vec.data(), vec.size() * sizeof(float), cudaMemcpyHostToDevice) );
 }
 
-int main() {
+int main(int argc,char* argv[]) {
   float* tmp=nullptr;
-
   /******************************
    * Shape definition 
    ******************************/
-  std::size_t genes{64};
-  std::size_t cells{1024};
-  std::size_t features{2};
+  const std::size_t genes{64};
+  const std::size_t cells{1024};
+  const std::size_t features{2};
 
   /* small debug files in ../data-debug/
   std::size_t genes{3};
@@ -89,21 +87,21 @@ int main() {
    ******************************/
   CUDA_CHECK( cudaMalloc((void**)&tmp, features*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> X{tmp};
-  auto X_host = readDatFile("../data/X.dat");
+  const auto X_host = readDatFile("../data/X.dat");
   toGPU(X_host, X.get());
   std::cout << "X {"<<cells<<","<<features <<"}\n";
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, cells*genes*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> Y{tmp};
-  auto Y_host = readDatFile("../data/Y.dat");
+  const auto Y_host = readDatFile("../data/Y.dat");
   toGPU(Y_host, Y.get());
   std::cout << "Y {"<<genes<<","<<cells<<"}\n";
   std::cout << std::flush;
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*cells*sizeof(float)) );
   std::unique_ptr<float,CudaDeleter<float>> offset{tmp};
-  auto offset_host = readDatFile("../data/off.dat");
+  const auto offset_host = readDatFile("../data/off.dat");
   toGPU(offset_host, offset.get());
   std::cout << "offset {"<<genes<<","<<cells <<"}\n";
   std::cout << std::flush;
@@ -111,7 +109,7 @@ int main() {
   
   CUDA_CHECK( cudaMalloc((void**)&tmp, genes*features*sizeof(float)) );
   std::unique_ptr<float, CudaDeleter<float>> mu_beta{tmp};
-  auto mu_beta_host = readDatFile("../data/mu_beta.dat");
+  const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
   toGPU(mu_beta_host, mu_beta.get());
   std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
   std::cout << std::flush;
@@ -142,11 +140,11 @@ int main() {
    * Create handlers and setup
    ******************************/
   cublasHandle_t cublasH;
-  CUBLAS_CHECK(cublasCreate(&cublasH));
+  CUBLAS_CHECK( cublasCreate(&cublasH) );
   cutensorHandle_t cutensorH;
   CUTENSOR_CHECK( cutensorCreate(&cutensorH) );
   constexpr int32_t numCachelines = 1024;
-  CUTENSOR_CHECK(cutensorHandleResizePlanCache(cutensorH, numCachelines));
+  CUTENSOR_CHECK( cutensorHandleResizePlanCache(cutensorH, numCachelines) );
   //cusolverDnHandle_t cusolverH;
   //CUSOLVER_CHECK( cusolverDnCreate(&cusolverH) );
   
@@ -171,7 +169,6 @@ int main() {
   EinsumWrapper einsum_Bk{ std::string{"gfc,g->gfc"},
                           {(int)genes, (int)features, (int)features},
                           {(int)genes}};
-
   EinsumWrapper einsum_C{ std::string{"cf,gc->gf"},
 			  {(int)cells, (int)features},
 			  {(int)genes, (int)cells}};
@@ -185,7 +182,7 @@ int main() {
   /******************************
    * This allocate the workspace and the output tensor
    ******************************/
-  float* w_qT=einsum_w_qT.allocate();
+  float *w_qT=einsum_w_qT.allocate();
   float *offsetT = einsum_offsetT.allocate();
   float *cg_tmp2 = einsum_cg_tmp2.allocate();
   float *A = einsum_A.allocate();
@@ -197,8 +194,6 @@ int main() {
   einsum_offsetT.execute(cutensorH, offset.get(), nullptr);
   //free offset memory after transposition
   offset.reset();
-
-  
 
   /******************************
    * Allocate Zigma, The array of pointer to Zigma and Bk
@@ -216,9 +211,11 @@ int main() {
   }
 
   /******************************
-   * Initialize norm s.t. the initial check is always True , set iter to 0, measure start time.
+   * Initialize norm s.t. the initial check is always True , set iter to 0,
+   *measure start time.
    ******************************/
-  float norm{std::sqrt(genes*features)};
+  //I know, there is a narrow conversion here.
+  float norm(std::sqrt(genes*features));
   std::size_t iter{0};
   auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -249,7 +246,10 @@ int main() {
     //std::cout << "Norm " << norm/std::sqrt(genes*features)<< std::endl;
   }
   auto t2 = std::chrono::high_resolution_clock::now();
+
   CUDA_CHECK(cudaFree(Zigma));
+  CUDA_CHECK(cudaFree(Bk_pointer));
+  CUDA_CHECK(cudaFree(Zigma_pointer));
   CUDA_CHECK(cudaFree(w_qT));
   CUDA_CHECK(cudaFree(offsetT));
   CUDA_CHECK(cudaFree(cg_tmp2));
@@ -259,6 +259,12 @@ int main() {
   CUDA_CHECK(cudaFree(Bk));
   CUDA_CHECK(cudaFree(delta));
   CUDA_CHECK(cudaFree(last));
+
+  /*********************
+   * Destroy handles
+   ********************/
+  CUBLAS_CHECK( cublasDestroy(cublasH) );
+  CUTENSOR_CHECK( cutensorDestroy(cutensorH) );
 
   std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
   printMatrix<<<1, 1>>>( genes,features, mu_beta.get());

@@ -1,4 +1,3 @@
-#include"cutensor.h"
 #include<vector>
 #include <algorithm>
 #include <array>
@@ -455,6 +454,10 @@ public:
       printf("Error on init\n");
     }
   }
+  ~EinsumWrapper() {
+    HANDLE_CUDA_ERROR(cudaFree(this->workspace_raw));
+  }
+
   float *allocate() {
     auto C_shape = this->internalEinsum.getOutputShape();
     size_t totalElementsC = 1;
