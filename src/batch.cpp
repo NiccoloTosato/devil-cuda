@@ -40,7 +40,7 @@ std::vector<float> readDatFile(const std::string& filename) {
   // Read the data
   std::vector<float> data(size / sizeof(float));
   if (file.read(reinterpret_cast<char *>(data.data()), size)) {
-    std::cout << "Loading file " << filename << " Success,size: " << data.size() << std::endl;
+    std::cout << "Loading file " << filename << " Success,elements read: " << data.size() << std::endl;
     return data;
   } else {
     std::cerr << "Error reading file " << filename << std::endl;
@@ -264,21 +264,21 @@ int main(int argc,char* argv[]) {
           // copy the necessary data!
           CUDA_CHECK(cudaMemcpy(
               offset[me],
-              offset_host.data() + 0* i  * genesBatch * cells * sizeof(float),
+              offset_host.data() + i  * genesBatch * cells,
               genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
 
           einsum_offsetT[me].execute(cutensorH[me], offset[me], nullptr);
 
           CUDA_CHECK(cudaMemcpy(
-			     mu_beta[me], mu_beta_host.data() +  0*i*genesBatch * features * sizeof(float),
+			     mu_beta[me], mu_beta_host.data() +  i *genesBatch * features,
 			     genesBatch*features* sizeof(float),
 			     cudaMemcpyHostToDevice));
           CUDA_CHECK(cudaMemcpy(
-				k[me],  k_host.data() +  0*i*genesBatch*1* sizeof(float),
+				k[me],  k_host.data() +  i *genesBatch*1,
 				genesBatch*1* sizeof(float),
                                 cudaMemcpyHostToDevice));
           CUDA_CHECK(cudaMemcpy(
-              Y[me], Y_host.data() +  0*i * genesBatch * cells * sizeof(float),
+              Y[me], Y_host.data() +  i * genesBatch * cells ,
               genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
 	  
 	  //set something to zero, required ? BOH,sicuro non falliremo per sta cosa qui
