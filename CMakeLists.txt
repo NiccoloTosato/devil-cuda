@@ -8,10 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set nvcc as cuda compiler
 set(CMAKE_CUDA_COMPILER nvcc)
-#set(CMAKE_CUDA_ARCHITECTURES "native")
+set(CMAKE_CUDA_ARCHITECTURES "80" "70" "72" "75")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp ")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -fopenmp -arch=native -G")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -O3")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -fopenmp -arch=native -O3")
 
 include(FetchContent)
 FetchContent_Declare(

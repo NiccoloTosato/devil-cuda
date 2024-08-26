@@ -165,7 +165,7 @@ int main(int argc,char* argv[]) {
      ***************************/
     int me{omp_get_thread_num()};
     
-    CUDA_CHECK( cudaThreadExit() );
+
     CUDA_CHECK(cudaSetDevice(me));
     /******************************
      * Create handlers and setup
@@ -325,7 +325,6 @@ int main(int argc,char* argv[]) {
 	    final1D<<<blocks1D,threads1D>>>(mu_beta[me],delta[me],genesBatch*features);
             cublasSnrm2(cublasH[me], genesBatch * features, delta[me], 1,
                         &norm);
-	    	  cudaDeviceSynchronize();
 	  }
 	  auto t2 = std::chrono::high_resolution_clock::now();
 	  auto elapsed{t2-t1};
@@ -342,7 +341,7 @@ int main(int argc,char* argv[]) {
       }
     }
     // free the memory
-    /*
+
     CUDA_CHECK(cudaFree(Zigma[me]));
     CUDA_CHECK(cudaFree(Bk_pointer[me]));
     CUDA_CHECK(cudaFree(Zigma_pointer[me]));
@@ -355,7 +354,7 @@ int main(int argc,char* argv[]) {
     CUDA_CHECK(cudaFree(Bk[me]));
     CUDA_CHECK(cudaFree(delta[me]));
     CUDA_CHECK(cudaFree(last[me]));
-    */
+
     /*********************
      * Destroy handles
      ********************/
