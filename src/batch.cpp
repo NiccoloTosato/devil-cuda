@@ -82,7 +82,7 @@ int main(int argc,char* argv[]) {
   const std::size_t genes{64};
   const std::size_t cells{1024};
   const std::size_t features{2};
-  std::size_t batchSize = 8;
+  std::size_t genesBatch = 8;
   /*******************************
    * Load from disk
    ******************************/
@@ -159,7 +159,8 @@ int main(int argc,char* argv[]) {
     
 #pragma omp parallel default(shared)//shared(einsum_offsetT,einsum_cg_tmp2,einsum_w_qT,einsum_A,einsum_B,einsum_Bk,einsum_C,einsum_last,einsum_delta,cublasH,cutensorH,Zigma_pointer,Bk_pointer,Zigma,w_qT,offsetT,cg_tmp2,A,B,C,Bk,delta,last,X,Y,offset,k,w_q,mu_g)
   {
-    std::size_t genesBatch{genes / batchSize};
+    std::size_t BatchCount{genes/genesBatch};
+
     /****************************
      * Select the device
      ***************************/
@@ -186,7 +187,7 @@ int main(int argc,char* argv[]) {
     CUDA_CHECK( cudaMalloc((void**)&offset[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&mu_beta[me], genesBatch*features*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&k[me], genesBatch*sizeof(float)) );
-    CUDA_CHECK( cudaMalloc((void**)&cg_tmp[me], genesBatch*cells*sizeof(float)) );
+//CUDA_CHECK( cudaMalloc((void**)&cg_tmp[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&w_q[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&mu_g[me], genesBatch*cells*sizeof(float)) );
 
@@ -246,16 +247,16 @@ int main(int argc,char* argv[]) {
     CUDA_CHECK(cudaMalloc((void **) &(Zigma[me]), sizeof(float) * features * features * genesBatch));
 
 
-    for (int i = 0; i < genesBatch; ++i) {
+    for (int i = 0; i < BatchCount; ++i) {
       Zigma_pointer[me][i] = Zigma[me] + features * features * i;
       Bk_pointer[me][i] = Bk[me] + features * features * i;
     }
 
     cudaDeviceSynchronize();
     
-#pragma omp single 
+#pragma omp single
     { //here we will generate the work ! 
-      for (int i = 0; i < genes / batchSize; ++i) {
+      for (int i = 0; i < BatchCount; ++i) {
 #pragma omp task default(shared)//shared(X,Y,offset,mu_beta,k,cg_tmp,mu_g,w_q,offset_host)
         {
           std::cout << "Batch " << i << " computed by " << omp_get_thread_num()
@@ -282,7 +283,6 @@ int main(int argc,char* argv[]) {
               genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
 	  
 	  //set something to zero, required ? BOH,sicuro non falliremo per sta cosa qui
-          CUDA_CHECK( cudaMemset(cg_tmp[me], 0, genesBatch*cells*sizeof(float)));
 	  CUDA_CHECK( cudaMemset(w_q[me], 0, genesBatch * cells * sizeof(float)));
 	  CUDA_CHECK( cudaMemset(mu_g[me], 0, genesBatch*cells*sizeof(float)));
           // execute the computation
@@ -292,15 +292,11 @@ int main(int argc,char* argv[]) {
 	   ******************************/
 	  //I know, there is a narrow conversion here.
           float norm(std::sqrt(genesBatch * features));
-
           std::size_t iter{0};
-	  std::cerr<<std::flush;
-	  cudaDeviceSynchronize();
 	  auto t1 = std::chrono::high_resolution_clock::now();
 	  while (iter < 100 && (norm/std::sqrt(genesBatch*features)) > 1E-4) {
 	    ++iter;
             einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me]);
-
 	    dim3 threads1D(256);
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
 	    expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offsetT[me], w_q[me],
@@ -313,7 +309,6 @@ int main(int argc,char* argv[]) {
 					       genesBatch, cells);
             elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_qT[me],
                                                  genesBatch * cells);
-
             einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
             einsum_B[me].execute(cutensorH[me], A[me], X[me]);
             einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
