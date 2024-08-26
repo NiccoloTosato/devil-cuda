@@ -96,28 +96,7 @@ int inverseMatrix2(cublasHandle_t cublasH, float *A_device[], float *A_inv_devic
       assert(0 == info[i]);
     }
   }
-  /*
-  dim3 threadsPerBlock(16, 16);
-  dim3 blocksPerGrid((n + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                     (n + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
-  for (int i = 0; i < batchSize; ++i) {
-    //could be optimized!
-    initIdentityGPU<<<blocksPerGrid, threadsPerBlock>>>(A_inv_device[i], n,
-n, 1.0);
-  }
-  CUBLAS_CHECK( cublasSgetrsBatched(cublasH,
-                                   CUBLAS_OP_N,
-                                   n,
-                                   n,
-                                   A_device,
-                                   n,
-                                    pivot,
-                                    A_inv_device,
-                                   n,
-                                   info,
-                                   batchSize) );
-  */
   cublasSgetriBatched(cublasH, n, A_device, n, pivot, A_inv_device, n, info, batchSize);
   for(int i=0;i<batchSize;++i) {
     if (info[i] != 0 ) {

@@ -131,57 +131,71 @@ int main(int argc,char* argv[]) {
   std::vector<EinsumWrapper> einsum_last(deviceCount);
   std::vector<EinsumWrapper> einsum_delta(deviceCount);
 
-  std::vector<float *> Y(deviceCount);
-  std::vector<float*> offset(deviceCount);
+  std::vector<float*> X(deviceCount);
   std::vector<float*> Y(deviceCount);
-#pragma omp parallel shared(einsum_offsetT,einsum_cg_tmp2,einsum_w_qT,einsum_A,einsum_B,einsum_Bk,einsum_C,einsum_last,einsum_delta,cublasH,cutensorH)
+  std::vector<float*> offset(deviceCount);
+  std::vector<float*> mu_beta(deviceCount);
+  std::vector<float *> k(deviceCount);
+  std::vector<float *> cg_tmp(deviceCount);
+  std::vector<float *> w_q(deviceCount);
+  std::vector<float *> mu_g(deviceCount);
+
+  //std::vector<float **> Zigma_pointer(deviceCount);
+  //std::vector<float **> Bk_pointer(deviceCount);
+  //std::vector<float *> Zigma;
+  float ***Zigma_pointer = (float***) malloc(sizeof(float **) * deviceCount);
+  float ***Bk_pointer = (float***) malloc(sizeof(float **) * deviceCount);
+  float** Zigma=(float**)malloc(sizeof(float*) * deviceCount);
+
+  std::vector<float *>    w_qT(deviceCount);
+  std::vector<float *>    offsetT(deviceCount);
+  std::vector<float *> cg_tmp2(deviceCount);
+  std::vector<float *>    A(deviceCount);
+  std::vector<float *>    B(deviceCount);
+  std::vector<float *>    C(deviceCount);
+  std::vector<float *>    Bk(deviceCount);
+  std::vector<float *>    delta(deviceCount);
+  std::vector<float *>    last(deviceCount);
+    
+#pragma omp parallel default(shared)//shared(einsum_offsetT,einsum_cg_tmp2,einsum_w_qT,einsum_A,einsum_B,einsum_Bk,einsum_C,einsum_last,einsum_delta,cublasH,cutensorH,Zigma_pointer,Bk_pointer,Zigma,w_qT,offsetT,cg_tmp2,A,B,C,Bk,delta,last,X,Y,offset,k,w_q,mu_g)
   {
     std::size_t genesBatch{genes / batchSize};
     /****************************
      * Select the device
      ***************************/
     int me{omp_get_thread_num()};
+    
+    CUDA_CHECK( cudaThreadExit() );
     CUDA_CHECK(cudaSetDevice(me));
     /******************************
      * Create handlers and setup
      ******************************/
     CUBLAS_CHECK(cublasCreate(&(cublasH[me])));
-    {
-      CUTENSOR_CHECK( cutensorCreate( &(cutensorH[me]) ) );
-    }
+    CUTENSOR_CHECK( cutensorCreate( &(cutensorH[me]) ) );
     constexpr int32_t numCachelines = 1024;
     CUTENSOR_CHECK( cutensorHandleResizePlanCache(cutensorH[me], numCachelines) );
     /********************************
-     * Allocate X on each device, since it is const do it only once
+     * Allocate and copy X on each device, since it is const do it now
      *******************************/
-    float* tmp=nullptr;
-    CUDA_CHECK( cudaMalloc((void**)&tmp, features*cells*sizeof(float)) );
-    std::unique_ptr<float,CudaDeleter<float>> X{tmp};
-    toGPU(X_host, X.get());
+    CUDA_CHECK( cudaMalloc((void**)&X[me], features*cells*sizeof(float)) );
+    toGPU(X_host, X[me]);
     /*********************************
      * Allocate Y,offset,K,mu_beta, but use genesBatch as size, not genes
      ********************************/
-    CUDA_CHECK( cudaMalloc((void**)&tmp, cells*genesBatch*sizeof(float)) );
-    std::unique_ptr<float,CudaDeleter<float>> Y{tmp};
-    CUDA_CHECK( cudaMalloc((void**)&tmp, genesBatch*cells*sizeof(float)) );
-    std::unique_ptr<float,CudaDeleter<float>> offset{tmp};
-    CUDA_CHECK( cudaMalloc((void**)&tmp, genesBatch*features*sizeof(float)) );
-    std::unique_ptr<float, CudaDeleter<float>> mu_beta{tmp};
-    CUDA_CHECK( cudaMalloc((void**)&tmp, genesBatch*sizeof(float)) );
-    std::unique_ptr<float,CudaDeleter<float>> k{tmp};
-    CUDA_CHECK( cudaMalloc((void**)&tmp, genesBatch*cells*sizeof(float)) );
-    std::unique_ptr<float, CudaDeleter<float>> cg_tmp{tmp};
-    CUDA_CHECK( cudaMalloc((void**)&tmp, genesBatch*cells*sizeof(float)) );
-    std::unique_ptr<float,CudaDeleter<float>> w_q{tmp};
-    CUDA_CHECK( cudaMalloc((void**)&tmp, genesBatch*cells*sizeof(float)) );
-    std::unique_ptr<float,CudaDeleter<float>> mu_g{tmp};
+    CUDA_CHECK( cudaMalloc((void**)&Y[me], cells*genesBatch*sizeof(float)) );
+    CUDA_CHECK( cudaMalloc((void**)&offset[me], genesBatch*cells*sizeof(float)) );
+    CUDA_CHECK( cudaMalloc((void**)&mu_beta[me], genesBatch*features*sizeof(float)) );
+    CUDA_CHECK( cudaMalloc((void**)&k[me], genesBatch*sizeof(float)) );
+    CUDA_CHECK( cudaMalloc((void**)&cg_tmp[me], genesBatch*cells*sizeof(float)) );
+    CUDA_CHECK( cudaMalloc((void**)&w_q[me], genesBatch*cells*sizeof(float)) );
+    CUDA_CHECK( cudaMalloc((void**)&mu_g[me], genesBatch*cells*sizeof(float)) );
+
     /*********************************
      * Initialize the Tensor object, this doesn't allocate nothing ! 
      ********************************/
     einsum_offsetT[me] = EinsumWrapper(std::string{"ij->ji"},
                                        {(int)genesBatch, (int)cells},
 				       {});
-
     einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ik,jk->ij"},
                                        {(int)cells, (int)features},
 				       {(int)genesBatch, (int)features});
@@ -196,7 +210,7 @@ int main(int argc,char* argv[]) {
 				  {(int)cells, (int)features});
     einsum_Bk[me] = EinsumWrapper ( std::string{"gfc,g->gfc"},
                           {(int)genesBatch, (int)features, (int)features},
-				    {(int)genes});
+				    {(int)genesBatch});
     einsum_C[me] = EinsumWrapper ( std::string{"cf,gc->gf"},
 			  {(int)cells, (int)features},
 				   {(int)genesBatch, (int)cells});
@@ -211,124 +225,137 @@ int main(int argc,char* argv[]) {
     /******************************
      * This allocate the workspace and the output tensor
      ******************************/
-    float *w_qT=einsum_w_qT[me].allocate();
-    float *offsetT = einsum_offsetT[me].allocate();
-    float *cg_tmp2 = einsum_cg_tmp2[me].allocate();
-    float *A = einsum_A[me].allocate();
-    float *B = einsum_B[me].allocate();
-    float *C = einsum_C[me].allocate();
-    float* Bk = einsum_Bk[me].allocate();
-    float *delta = einsum_delta[me].allocate();
-    float *last = einsum_last[me].allocate();
-    
+    w_qT[me]=einsum_w_qT[me].allocate();
+    offsetT[me] = einsum_offsetT[me].allocate();
+    cg_tmp2[me] = einsum_cg_tmp2[me].allocate();
+    A[me] = einsum_A[me].allocate();
+    B[me] = einsum_B[me].allocate();
+    C[me] = einsum_C[me].allocate();
+    Bk[me] = einsum_Bk[me].allocate();
+    delta[me] = einsum_delta[me].allocate();
+    last[me] = einsum_last[me].allocate();
     //free offset memory after transposition
     //offset.reset();
     /******************************
      * Allocate Zigma, The array of pointer to Zigma and Bk
      ******************************/
-    float **Zigma_pointer;
-    float **Bk_pointer; 
-    float *Zigma;
-    //Use Managed memory to simply set the addresses
-    CUDA_CHECK(cudaMallocManaged(&Zigma_pointer, genesBatch * sizeof(float*)) );
-    CUDA_CHECK(cudaMallocManaged(&Bk_pointer, genesBatch * sizeof(float*)) );
-    CUDA_CHECK(cudaMalloc(&Zigma, sizeof(float) * features * features * genesBatch));
+
+    // Use Managed memory to simply set the addresses
+    CUDA_CHECK(cudaMallocManaged((void **) &(Zigma_pointer[me]), genesBatch * sizeof(float*)) );
+    CUDA_CHECK(cudaMallocManaged((void **) &(Bk_pointer[me]), genesBatch * sizeof(float*)) );
+    CUDA_CHECK(cudaMalloc((void **) &(Zigma[me]), sizeof(float) * features * features * genesBatch));
+
+
     for (int i = 0; i < genesBatch; ++i) {
-      Zigma_pointer[i] = Zigma + features * features * i;
-      Bk_pointer[i] = Bk + features * features * i;
+      Zigma_pointer[me][i] = Zigma[me] + features * features * i;
+      Bk_pointer[me][i] = Bk[me] + features * features * i;
     }
+
     cudaDeviceSynchronize();
     
-#pragma omp single nowait
+#pragma omp single 
     { //here we will generate the work ! 
       for (int i = 0; i < genes / batchSize; ++i) {
-#pragma omp task shared(X,Y,offset,mu_beta,k,cg_tmp,mu_g,w_q,offset_host)
+#pragma omp task default(shared)//shared(X,Y,offset,mu_beta,k,cg_tmp,mu_g,w_q,offset_host)
         {
           std::cout << "Batch " << i << " computed by " << omp_get_thread_num()
                     << std::endl;
 	  int me=omp_get_thread_num();
-          std::cout << "Offset address " << offset.get() << std::endl;
-	  std::this_thread::sleep_for(std::chrono::seconds(8));
           // copy the necessary data!
+          CUDA_CHECK(cudaMemcpy(
+              offset[me],
+              offset_host.data() + 0* i  * genesBatch * cells * sizeof(float),
+              genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
+
+          einsum_offsetT[me].execute(cutensorH[me], offset[me], nullptr);
 
           CUDA_CHECK(cudaMemcpy(
-				offset.get(),
-				offset_host.data() + i * genesBatch * cells * sizeof(float),
-				genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
-          einsum_offsetT[me].execute(cutensorH[me], offset.get(), nullptr);
-	  
+			     mu_beta[me], mu_beta_host.data() +  0*i*genesBatch * features * sizeof(float),
+			     genesBatch*features* sizeof(float),
+			     cudaMemcpyHostToDevice));
           CUDA_CHECK(cudaMemcpy(
-				mu_beta.get(), mu_beta_host.data() + i*genesBatch * features * sizeof(float),
-				genesBatch*features* sizeof(float),
-                                cudaMemcpyHostToDevice));
-          CUDA_CHECK(cudaMemcpy(
-				k.get(), k_host.data() + i*genesBatch * 1 * sizeof(float),
+				k[me],  k_host.data() +  0*i*genesBatch*1* sizeof(float),
 				genesBatch*1* sizeof(float),
                                 cudaMemcpyHostToDevice));
           CUDA_CHECK(cudaMemcpy(
-				Y.get(), Y_host.data() + i*genesBatch * cells * sizeof(float),
-				genesBatch*cells* sizeof(float),
-                                cudaMemcpyHostToDevice));
-
-	  //set something to zero, required ? BOH
-          CUDA_CHECK( cudaMemset(cg_tmp.get(), 0, genesBatch*cells*sizeof(float)));
-	  CUDA_CHECK( cudaMemset(w_q.get(), 0, genesBatch * cells * sizeof(float)));
-	  CUDA_CHECK( cudaMemset(mu_g.get(), 0, genesBatch*cells*sizeof(float)));
+              Y[me], Y_host.data() +  0*i * genesBatch * cells * sizeof(float),
+              genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
+	  
+	  //set something to zero, required ? BOH,sicuro non falliremo per sta cosa qui
+          CUDA_CHECK( cudaMemset(cg_tmp[me], 0, genesBatch*cells*sizeof(float)));
+	  CUDA_CHECK( cudaMemset(w_q[me], 0, genesBatch * cells * sizeof(float)));
+	  CUDA_CHECK( cudaMemset(mu_g[me], 0, genesBatch*cells*sizeof(float)));
           // execute the computation
 	  /******************************
 	   * Initialize norm s.t. the initial check is always True , set iter to 0,
 	   * measure start time.
 	   ******************************/
 	  //I know, there is a narrow conversion here.
-	  float norm(std::sqrt(genesBatch*features));
-	  std::size_t iter{0};
+          float norm(std::sqrt(genesBatch * features));
+
+          std::size_t iter{0};
+	  std::cerr<<std::flush;
+	  cudaDeviceSynchronize();
 	  auto t1 = std::chrono::high_resolution_clock::now();
-	  while (iter < 8000 && (norm/std::sqrt(genesBatch*features)) > 1E-12) {
+	  while (iter < 100 && (norm/std::sqrt(genesBatch*features)) > 1E-4) {
 	    ++iter;
-	    einsum_cg_tmp2[me].execute(cutensorH[me], X.get(), mu_beta.get());
+            einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me]);
+
 	    dim3 threads1D(256);
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
-	    expGPU<<<blocks1D, threads1D>>>(cg_tmp2, offsetT, w_q.get(),
+	    expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offsetT[me], w_q[me],
 					    genesBatch * cells);
-	    einsum_w_qT[me].execute(cutensorH[me],w_q.get(),nullptr);
+	    einsum_w_qT[me].execute(cutensorH[me],w_q[me],nullptr);
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
 			  (genesBatch + threads2D.y - 1) / threads2D.y);
-	    process2D<<<blocks2D, threads2D>>>(k.get(), Y.get(), w_qT, mu_g.get(),
+	    process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_qT[me], mu_g[me],
 					       genesBatch, cells);
-	    elementWise<<<blocks1D, threads1D>>>(mu_g.get(), w_qT, genesBatch * cells);
-	    einsum_A[me].execute(cutensorH[me], X.get(), mu_g.get());
-	    einsum_B[me].execute(cutensorH[me], A, X.get());
-	    einsum_Bk[me].execute(cutensorH[me],B,k.get());
-	    inverseMatrix2(cublasH[me], Bk_pointer, Zigma_pointer, features ,genesBatch);
-	    elementWiseSub<<<blocks1D,threads1D>>>(mu_g.get(), genesBatch*cells);
-	    einsum_C[me].execute(cutensorH[me],X.get(),mu_g.get()); 
-	    einsum_last[me].execute(cutensorH[me],k.get(),C);
-	    einsum_delta[me].execute(cutensorH[me],Zigma,last);
-	    final1D<<<blocks1D,threads1D>>>(mu_beta.get(),delta,genesBatch*features);
-	    cublasSnrm2(cublasH[me], genes * features, delta, 1, &norm);
+            elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_qT[me],
+                                                 genesBatch * cells);
+
+            einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
+            einsum_B[me].execute(cutensorH[me], A[me], X[me]);
+            einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
+            inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me], features, genesBatch);
+	    elementWiseSub<<<blocks1D,threads1D>>>(mu_g[me], genesBatch*cells);
+	    einsum_C[me].execute(cutensorH[me], X[me], mu_g[me]);
+            einsum_last[me].execute(cutensorH[me], k[me], C[me]);
+            einsum_delta[me].execute(cutensorH[me], Zigma[me], last[me]);
+	    final1D<<<blocks1D,threads1D>>>(mu_beta[me],delta[me],genesBatch*features);
+            cublasSnrm2(cublasH[me], genesBatch * features, delta[me], 1,
+                        &norm);
+	    	  cudaDeviceSynchronize();
 	  }
 	  auto t2 = std::chrono::high_resolution_clock::now();
 	  auto elapsed{t2-t1};
-	  std::cout<<std::chrono::duration<double,std::milli>(elapsed).count() / iter << " ms [avg iter time]"<<std::endl;
+          std::cout
+              << std::chrono::duration<double, std::milli>(elapsed).count() /
+                     iter
+              << " ms [avg iter time]" << std::endl;
+	  std::cout << "mu_beta {"<<genesBatch<<","<<features <<"}\n";
+	  printMatrix<<<1, 1>>>( genesBatch,features, mu_beta[me]);
+	  cudaDeviceSynchronize();
+	  std::cout << std::flush;
             // copy back the data, this assume that I prepared something!
         }
       }
     }
     // free the memory
-    CUDA_CHECK(cudaFree(Zigma));
-    CUDA_CHECK(cudaFree(Bk_pointer));
-    CUDA_CHECK(cudaFree(Zigma_pointer));
-    CUDA_CHECK(cudaFree(w_qT));
-    CUDA_CHECK(cudaFree(offsetT));
-    CUDA_CHECK(cudaFree(cg_tmp2));
-    CUDA_CHECK(cudaFree(A));
-    CUDA_CHECK(cudaFree(B));
-    CUDA_CHECK(cudaFree(C));
-    CUDA_CHECK(cudaFree(Bk));
-    CUDA_CHECK(cudaFree(delta));
-    CUDA_CHECK(cudaFree(last));
-
+    /*
+    CUDA_CHECK(cudaFree(Zigma[me]));
+    CUDA_CHECK(cudaFree(Bk_pointer[me]));
+    CUDA_CHECK(cudaFree(Zigma_pointer[me]));
+    CUDA_CHECK(cudaFree(w_qT[me]));
+    CUDA_CHECK(cudaFree(offsetT[me]));
+    CUDA_CHECK(cudaFree(cg_tmp2[me]));
+    CUDA_CHECK(cudaFree(A[me]));
+    CUDA_CHECK(cudaFree(B[me]));
+    CUDA_CHECK(cudaFree(C[me]));
+    CUDA_CHECK(cudaFree(Bk[me]));
+    CUDA_CHECK(cudaFree(delta[me]));
+    CUDA_CHECK(cudaFree(last[me]));
+    */
     /*********************
      * Destroy handles
      ********************/

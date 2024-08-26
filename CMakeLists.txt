@@ -10,8 +10,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_COMPILER nvcc)
 #set(CMAKE_CUDA_ARCHITECTURES "native")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fopenmp ")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -fopenmp -arch=native -G -lineinfo")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp ")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -fopenmp -arch=native -G")
 
 include(FetchContent)
 FetchContent_Declare(

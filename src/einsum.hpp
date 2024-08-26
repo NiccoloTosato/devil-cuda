@@ -139,7 +139,7 @@ struct Einsum
         {
             // substring size and shape don't match
 	  printf("Substring size and shape don't match ! \n");
-            return;
+	  return;
         }
         if (numModesA_ > kMaxNumModes_ || numModesB_ > kMaxNumModes_)
         {
@@ -483,7 +483,7 @@ public:
 
   EinsumWrapper(std::string subscripts, std::vector<int> A_shape,
                 std::vector<int> B_shape): internalEinsum(subscripts, A_shape, B_shape) {
-    std::cout << "Costruttore invocato: " << subscripts << std::endl;
+    //std::cout << "Costruttore invocato: " << subscripts << std::endl;
     if (!internalEinsum.isInitialized()) {
       printf("Error on init\n");
     }
@@ -491,7 +491,7 @@ public:
   
   ~EinsumWrapper() {
       if (this->workspace_raw != nullptr) {
-	std::cout << "Distruttore invocato !!!! " << this->workspace_raw << std::endl;
+	//std::cout << "Distruttore invocato !!!! " << this->workspace_raw << std::endl;
 	HANDLE_CUDA_ERROR(cudaFree(this->workspace_raw));
       }
   }
