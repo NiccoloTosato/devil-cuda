@@ -1,3 +1,32 @@
+/*  
+ * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+ * 
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  - Neither the name(s) of the copyright holder(s) nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */  
+
 #include<vector>
 #include <algorithm>
 #include <array>
@@ -48,7 +77,8 @@ template<typename ComputeType,
 struct Einsum
 {
     static const std::vector<IntType> emptyVec;
-
+  Einsum() {
+  };
     Einsum(const std::string &equation,
            const std::vector<IntType> &A_shape,
            const std::vector<IntType> &B_shape = emptyVec) :
@@ -444,18 +474,26 @@ void** general_einsum(cutensorHandle_t handle,
 
 class EinsumWrapper {
 private:
-  float *output_raw;
-  void *workspace_raw;
+  float *output_raw{nullptr};
+  void *workspace_raw{nullptr};
   Einsum<float, int, 3> internalEinsum;
 public:
+  EinsumWrapper(): output_raw{nullptr},workspace_raw{nullptr} {
+  }
+
   EinsumWrapper(std::string subscripts, std::vector<int> A_shape,
                 std::vector<int> B_shape): internalEinsum(subscripts, A_shape, B_shape) {
+    std::cout << "Costruttore invocato: " << subscripts << std::endl;
     if (!internalEinsum.isInitialized()) {
       printf("Error on init\n");
     }
-  }
+  };
+  
   ~EinsumWrapper() {
-    HANDLE_CUDA_ERROR(cudaFree(this->workspace_raw));
+      if (this->workspace_raw != nullptr) {
+	std::cout << "Distruttore invocato !!!! " << this->workspace_raw << std::endl;
+	HANDLE_CUDA_ERROR(cudaFree(this->workspace_raw));
+      }
   }
 
   float *allocate() {

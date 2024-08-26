@@ -11,11 +11,13 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <cusolverDn.h>
+
 #include "einsum.hpp"
 #include "kernel.h"
 #include "inverse.hpp"
 #include "utils.hpp"
 #include "cutensor.h"
+#include <omp.h>
 
 template <typename T>
 struct CudaDeleter {
@@ -234,7 +236,7 @@ int main(int argc,char* argv[]) {
                                        genes, cells);
     elementWise<<<blocks1D, threads1D>>>(mu_g.get(), w_qT, genes * cells);
     einsum_A.execute(cutensorH, X.get(), mu_g.get());
-    einsum_B.execute(cutensorH, A, X.get());
+     einsum_B.execute(cutensorH, A, X.get());
     einsum_Bk.execute(cutensorH,B,k.get());
     inverseMatrix2(cublasH, Bk_pointer, Zigma_pointer, features ,genes);
     elementWiseSub<<<blocks1D,threads1D>>>(mu_g.get(), genes*cells);
