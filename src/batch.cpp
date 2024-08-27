@@ -336,7 +336,6 @@ int main(int argc,char* argv[]) {
       }
     }
     // free the memory
-
     CUDA_CHECK(cudaFree(Zigma[me]));
     CUDA_CHECK(cudaFree(Bk_pointer[me]));
     CUDA_CHECK(cudaFree(Zigma_pointer[me]));
