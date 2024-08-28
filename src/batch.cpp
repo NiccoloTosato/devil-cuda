@@ -70,7 +70,7 @@ void toGPU(const std::vector<float> &vec,float* const vec_gpu) {
   CUDA_CHECK( cudaMemcpy(vec_gpu, vec.data(), vec.size() * sizeof(float), cudaMemcpyHostToDevice) );
 }
 
-int main(int argc,char* argv[]) {
+void beta_fit_gpu() {
   /* small debug files in ../data-debug/
   std::size_t genes{3};
   std::size_t cells{4};
