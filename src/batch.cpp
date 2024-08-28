@@ -71,22 +71,25 @@ void toGPU(auto vec,float* const vec_gpu) {
 }
 
 void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
+
   /******************************
    * Shape definition 
    ******************************/
   const std::size_t genes{64};
   const std::size_t cells{1024};
   const std::size_t features{2};
-  std::size_t genesBatch = 8;
+
+  std::size_t genesBatch = 32;
+  
   /*******************************
    * Load from disk
    ******************************/
+  // const auto X_host = readDatFile("../data/X.dat");
+  // const auto Y_host = readDatFile("../data/Y.dat");
+  // const auto offset_host = readDatFile("../data/off.dat");
+  // const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
+  // auto k_host = readDatFile("../data/K.dat");
   
-  //const auto X_host = readDatFile("../data/X.dat");
-  //const auto Y_host = readDatFile("../data/Y.dat");
-  //const auto offset_host = readDatFile("../data/off.dat");
-  //const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
-  //auto k_host = readDatFile("../data/K.dat");
   for (int i=0;i<genes;++i){
     k_host[i] = 1 / k_host[i];
   }
@@ -186,7 +189,7 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
     CUDA_CHECK( cudaMalloc((void**)&offset[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&mu_beta[me], genesBatch*features*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&k[me], genesBatch*sizeof(float)) );
-//CUDA_CHECK( cudaMalloc((void**)&cg_tmp[me], genesBatch*cells*sizeof(float)) );
+    //CUDA_CHECK( cudaMalloc((void**)&cg_tmp[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&w_q[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&mu_g[me], genesBatch*cells*sizeof(float)) );
 
@@ -245,8 +248,7 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
     CUDA_CHECK(cudaMallocManaged((void **) &(Bk_pointer[me]), genesBatch * sizeof(float*)) );
     CUDA_CHECK(cudaMalloc((void **) &(Zigma[me]), sizeof(float) * features * features * genesBatch));
 
-
-    for (int i = 0; i < BatchCount; ++i) {
+    for (int i = 0; i < genesBatch; ++i) {
       Zigma_pointer[me][i] = Zigma[me] + features * features * i;
       Bk_pointer[me][i] = Bk[me] + features * features * i;
     }
@@ -266,9 +268,7 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
               offset[me],
               offset_host.data() + i  * genesBatch * cells,
               genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
-
           einsum_offsetT[me].execute(cutensorH[me], offset[me], nullptr);
-
           CUDA_CHECK(cudaMemcpy(
 			     mu_beta[me], mu_beta_host.data() +  i *genesBatch * features,
 			     genesBatch*features* sizeof(float),
@@ -280,7 +280,6 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
           CUDA_CHECK(cudaMemcpy(
               Y[me], Y_host.data() +  i * genesBatch * cells ,
               genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
-	  
 	  //set something to zero, required ? BOH,sicuro non falliremo per sta cosa qui
 	  CUDA_CHECK( cudaMemset(w_q[me], 0, genesBatch * cells * sizeof(float)));
 	  CUDA_CHECK( cudaMemset(mu_g[me], 0, genesBatch*cells*sizeof(float)));
@@ -300,7 +299,8 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
 	    expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offsetT[me], w_q[me],
 					    genesBatch * cells);
-	    einsum_w_qT[me].execute(cutensorH[me],w_q[me],nullptr);
+            einsum_w_qT[me].execute(cutensorH[me], w_q[me], nullptr);
+
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
 			  (genesBatch + threads2D.y - 1) / threads2D.y);
@@ -311,7 +311,9 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
             einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
             einsum_B[me].execute(cutensorH[me], A[me], X[me]);
             einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
-            inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me], features, genesBatch);
+            inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me],
+                           features, genesBatch);
+
 	    elementWiseSub<<<blocks1D,threads1D>>>(mu_g[me], genesBatch*cells);
 	    einsum_C[me].execute(cutensorH[me], X[me], mu_g[me]);
             einsum_last[me].execute(cutensorH[me], k[me], C[me]);
