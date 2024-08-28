@@ -19,7 +19,7 @@
 #include "utils.hpp"
 #include "cutensor.h"
 #include <omp.h>
-
+#include <Eigen/Dense>
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
@@ -66,16 +66,11 @@ __global__ void printMatrixT(const int rows,const int cols, float* const matrix)
     }
 }
 
-void toGPU(const std::vector<float> &vec,float* const vec_gpu) {
+void toGPU(auto vec,float* const vec_gpu) {
   CUDA_CHECK( cudaMemcpy(vec_gpu, vec.data(), vec.size() * sizeof(float), cudaMemcpyHostToDevice) );
 }
 
-void beta_fit_gpu() {
-  /* small debug files in ../data-debug/
-  std::size_t genes{3};
-  std::size_t cells{4};
-  std::size_t features{2};
-  */
+void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
   /******************************
    * Shape definition 
    ******************************/
@@ -86,13 +81,16 @@ void beta_fit_gpu() {
   /*******************************
    * Load from disk
    ******************************/
-  const auto X_host = readDatFile("../data/X.dat");
-  const auto Y_host = readDatFile("../data/Y.dat");
-  const auto offset_host = readDatFile("../data/off.dat");
-  const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
-  auto k_host = readDatFile("../data/K.dat");
-  for (auto &x : k_host)
-    x=1/x;
+  
+  //const auto X_host = readDatFile("../data/X.dat");
+  //const auto Y_host = readDatFile("../data/Y.dat");
+  //const auto offset_host = readDatFile("../data/off.dat");
+  //const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
+  //auto k_host = readDatFile("../data/K.dat");
+  for (int i=0;i<genes;++i){
+    k_host[i] = 1 / k_host[i];
+  }
+  
   //  const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
 
   std::vector<float> mu_beta_final(genes*features, 0.0);
@@ -140,9 +138,10 @@ void beta_fit_gpu() {
   std::vector<float *> w_q(deviceCount);
   std::vector<float *> mu_g(deviceCount);
 
-  //std::vector<float **> Zigma_pointer(deviceCount);
-  //std::vector<float **> Bk_pointer(deviceCount);
-  //std::vector<float *> Zigma;
+  // std::vector<float **> Zigma_pointer(deviceCount);
+  // std::vector<float **> Bk_pointer(deviceCount);
+  // std::vector<float *> Zigma;
+  //this will become again a series of std::vector
   float ***Zigma_pointer = (float***) malloc(sizeof(float **) * deviceCount);
   float ***Bk_pointer = (float***) malloc(sizeof(float **) * deviceCount);
   float** Zigma=(float**)malloc(sizeof(float*) * deviceCount);

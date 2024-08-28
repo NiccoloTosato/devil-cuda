@@ -22,6 +22,7 @@ add_compile_options( -O3 -fopenmp)
 
 find_package(CUDAToolkit REQUIRED)
 find_package(OpenMP REQUIRED)
+find_package(Eigen3 3.3 REQUIRED)
 
 include_directories(~/.local/include/cutensor ~/.local/include/ ${CMAKE_SOURCE_DIR}/include)
 link_directories( ~/.local/lib/cutensor)
@@ -39,7 +40,7 @@ set( BETA_FIT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/inverse.hpp
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/inverse.cpp PROPERTIES LANGUAGE CUDA)
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/batch.cpp PROPERTIES LANGUAGE CUDA)
 
-set(BETA_FIT_LIBRARIES  CUDA::cudart CUDA::cublas CUDA::cusolver cutensor OpenMP::OpenMP_CXX)
+set(BETA_FIT_LIBRARIES  CUDA::cudart CUDA::cublas CUDA::cusolver cutensor OpenMP::OpenMP_CXX Eigen3::Eigen)
 
 add_library(objlib OBJECT ${BETA_FIT_SOURCES})
 target_link_libraries(objlib ${BETA_FIT_LIBRARIES})
