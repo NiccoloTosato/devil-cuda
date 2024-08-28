@@ -20,6 +20,7 @@
 #include "cutensor.h"
 #include <omp.h>
 #include <Eigen/Dense>
+
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
@@ -70,7 +71,7 @@ void toGPU(auto vec,float* const vec_gpu) {
   CUDA_CHECK( cudaMemcpy(vec_gpu, vec.data(), vec.size() * sizeof(float), cudaMemcpyHostToDevice) );
 }
 
-void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
+void beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
 
   /******************************
    * Shape definition 
@@ -366,4 +367,6 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
 
 }
 
-
+void hello() {
+  std::cout<<"Linking okay"<<std::endl;
+}
