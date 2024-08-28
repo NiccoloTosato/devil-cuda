@@ -77,7 +77,7 @@ void beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen
    * Shape definition 
    ******************************/
   const std::size_t genes(Y_host.rows());
-  const std::size_t cells(X_host.cells());
+  const std::size_t cells(X_host.rows());
   const std::size_t features(X_host.cols());
 
   std::size_t genesBatch = 16;
