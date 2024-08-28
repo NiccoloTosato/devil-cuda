@@ -76,9 +76,9 @@ void beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen
   /******************************
    * Shape definition 
    ******************************/
-  const std::size_t genes{64};
-  const std::size_t cells{1024};
-  const std::size_t features{2};
+  const std::size_t genes{Y_host.rows()};
+  const std::size_t cells{X_host.cells()};
+  const std::size_t features{X_host.cols()};
 
   std::size_t genesBatch = 16;
   
@@ -101,7 +101,6 @@ void beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen
 	    
   cudaDeviceProp deviceProp;
   cudaGetDeviceProperties(&deviceProp, 0);
-  
   std::cout << "Device " << 0 << ": " << deviceProp.name << std::endl;
   std::cout << "  Compute capability: " << deviceProp.major << "." << deviceProp.minor << std::endl;
   std::cout << "X {"<<cells<<","<<features <<"}\n";
