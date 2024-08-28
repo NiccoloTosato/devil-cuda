@@ -79,7 +79,7 @@ void beta_fit_gpu(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixX
   const std::size_t cells{1024};
   const std::size_t features{2};
 
-  std::size_t genesBatch = 32;
+  std::size_t genesBatch = 16;
   
   /*******************************
    * Load from disk
