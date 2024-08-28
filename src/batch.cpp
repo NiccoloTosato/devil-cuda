@@ -370,7 +370,7 @@ Eigen::MatrixXf beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_
   //  cudaDeviceSynchronize();
 
   //std::cout << "Norm " << norm / std::sqrt(genes * features) << std::endl;
-  Eigen::Map<Eigen::MatrixXf> result(mu_beta_final.data(), features,genes);
+  Eigen::Map<Eigen::MatrixXf> result(mu_beta_final.data(), genes,features);
   return result;
 }
 
