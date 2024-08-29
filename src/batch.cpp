@@ -53,15 +53,15 @@ void toGPU(auto vec,float* const vec_gpu) {
 //Eigen::MatrixXf beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
 beta_fit_gpu_external(
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
         Y_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
         X_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
         mu_beta_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
         offset_host,
-    Eigen::VectorXf& k_host, int max_iter, float eps,int batch_size) {
+    Eigen::VectorXf const & kk_host, int max_iter, float eps,int batch_size) {
   
 
   /******************************
@@ -81,9 +81,9 @@ beta_fit_gpu_external(
   // const auto offset_host = readDatFile("../data/off.dat");
   // const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
   // auto k_host = readDatFile("../data/K.dat");
-  
+  Eigen::VectorXf k_host(kk_host.size());
   for (int i=0;i<genes;++i){
-    k_host[i] = 1 / k_host[i];
+    k_host[i] = 1 / kk_host[i];
   }
   
   //  const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
