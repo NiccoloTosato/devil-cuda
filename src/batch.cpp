@@ -28,27 +28,6 @@ struct CudaDeleter {
     }
 };
 
-std::vector<float> readDatFile(const std::string& filename) {
-  std::ifstream file(filename, std::ios::binary);
-  if (!file) {
-    std::cerr << "Unable to open file " << filename << std::endl;
-    return {};
-  }
-  // Get the file size
-  file.seekg(0, std::ios::end);
-  std::streamsize size = file.tellg();
-  file.seekg(0, std::ios::beg);
-  // Read the data
-  std::vector<float> data(size / sizeof(float));
-  if (file.read(reinterpret_cast<char *>(data.data()), size)) {
-    std::cout << "Loading file " << filename << " Success,elements read: " << data.size() << std::endl;
-    return data;
-  } else {
-    std::cerr << "Error reading file " << filename << std::endl;
-    return {};
-  }
-}
-
 __global__ void printMatrix(const int rows,const int cols, float* const matrix) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -72,17 +51,17 @@ void toGPU(auto vec,float* const vec_gpu) {
 }
 
 //Eigen::MatrixXf beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
-Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
 beta_fit_gpu_external(
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
         Y_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
         X_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
         mu_beta_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
         offset_host,
-    Eigen::VectorXf k_host, int max_iter, float eps,int batch_size) {
+    Eigen::VectorXf& k_host, int max_iter, float eps,int batch_size) {
   
 
   /******************************
