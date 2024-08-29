@@ -94,11 +94,11 @@ beta_fit_gpu_external(
   cudaGetDeviceProperties(&deviceProp, 0);
   std::cout << "Device " << 0 << ": " << deviceProp.name << std::endl;
   std::cout << "  Compute capability: " << deviceProp.major << "." << deviceProp.minor << std::endl;
-  std::cout << "X {"<<cells<<","<<features <<"}\n";
-  std::cout << "Y {" << genes << "," << cells << "}\n";
-  std::cout << "offset {"<<genes<<","<<cells <<"}\n";
-  std::cout << "mu_beta {" << genes << "," << features << "}\n";
-  std::cout << "K {" << genes << "," << 1 << "}\n";
+  //  std::cout << "X {"<<cells<<","<<features <<"}\n";
+  //std::cout << "Y {" << genes << "," << cells << "}\n";
+  //std::cout << "offset {"<<genes<<","<<cells <<"}\n";
+  //std::cout << "mu_beta {" << genes << "," << features << "}\n";
+  //std::cout << "K {" << genes << "," << 1 << "}\n";
 
   int deviceCount = 0;
   CUDA_CHECK(cudaGetDeviceCount(&deviceCount));
@@ -250,8 +250,8 @@ beta_fit_gpu_external(
       for (int i = 0; i < BatchCount; ++i) {
 #pragma omp task default(shared)//shared(X,Y,offset,mu_beta,k,cg_tmp,mu_g,w_q,offset_host)
         {
-          std::cout << "Batch " << i << " computed by " << omp_get_thread_num()
-                    << std::endl;
+	  //          std::cout << "Batch " << i << " computed by " << omp_get_thread_num()
+          //          << std::endl;
 	  int me=omp_get_thread_num();
           // copy the necessary data!
           CUDA_CHECK(cudaMemcpy(
