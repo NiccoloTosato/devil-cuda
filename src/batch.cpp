@@ -51,7 +51,7 @@ void toGPU(auto vec,float* const vec_gpu) {
 }
 
 //Eigen::MatrixXf beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
-Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
+Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
 beta_fit_gpu_external(
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
         Y_host,
@@ -314,22 +314,24 @@ beta_fit_gpu_external(
 	  }
 	  auto t2 = std::chrono::high_resolution_clock::now();
 	  auto elapsed{t2-t1};
+          /*
           std::cout
               << std::chrono::duration<double, std::milli>(elapsed).count() /
                      iter
               << " ms [avg iter time]" << std::endl;
+	      std::cout << "mu_beta {"<<genesBatch<<","<<features <<"}\n";
+	      printMatrix<<<1, 1>>>(genesBatch, features, mu_beta[me]);
+	      std::cout << std::flush;
+	  */
           cudaDeviceSynchronize();
 
-          std::cout << "mu_beta {"<<genesBatch<<","<<features <<"}\n";
-          printMatrix<<<1, 1>>>(genesBatch, features, mu_beta[me]);
           CUDA_CHECK(cudaMemcpy(mu_beta_final.data() +  i *genesBatch * features,
 			     mu_beta[me], 
 			     genesBatch*features* sizeof(float),
 			     cudaMemcpyDeviceToHost));
 	  
-
           cudaDeviceSynchronize();
-          std::cout << std::flush;
+          
             // copy back the data, this assume that I prepared something!
         }
 	
