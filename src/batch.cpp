@@ -63,24 +63,17 @@ beta_fit_gpu_external(
         offset_host,
     Eigen::VectorXf const & kk_host, int max_iter, float eps,int batch_size) {
   
-
   /******************************
    * Shape definition 
    ******************************/
-  const std::size_t genes(Y_host.rows());
-  const std::size_t cells(X_host.rows());
-  const std::size_t features(X_host.cols());
-
+  const std::size_t genes(Y_host.cols());
+  const std::size_t cells(X_host.cols());
+  const std::size_t features(X_host.rows());
   std::size_t genesBatch = batch_size;
   
   /*******************************
    * Load from disk
    ******************************/
-  // const auto X_host = readDatFile("../data/X.dat");
-  // const auto Y_host = readDatFile("../data/Y.dat");
-  // const auto offset_host = readDatFile("../data/off.dat");
-  // const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
-  // auto k_host = readDatFile("../data/K.dat");
   Eigen::VectorXf k_host(kk_host.size());
   for (int i=0;i<genes;++i){
     k_host[i] = 1 / kk_host[i];
@@ -94,11 +87,11 @@ beta_fit_gpu_external(
   cudaGetDeviceProperties(&deviceProp, 0);
   std::cout << "Device " << 0 << ": " << deviceProp.name << std::endl;
   std::cout << "  Compute capability: " << deviceProp.major << "." << deviceProp.minor << std::endl;
-  //  std::cout << "X {"<<cells<<","<<features <<"}\n";
-  //std::cout << "Y {" << genes << "," << cells << "}\n";
-  //std::cout << "offset {"<<genes<<","<<cells <<"}\n";
-  //std::cout << "mu_beta {" << genes << "," << features << "}\n";
-  //std::cout << "K {" << genes << "," << 1 << "}\n";
+  std::cout << "X {"<<features<<","<<cells <<"}\n";
+  std::cout << "Y {" << cells << "," << genes << "}\n";
+  std::cout << "offset {"<<cells<<","<<genes <<"}\n";
+  std::cout << "mu_beta {" << features << "," << genes << "}\n";
+  std::cout << "K {" << genes << "," << 1 << "}\n";
 
   int deviceCount = 0;
   CUDA_CHECK(cudaGetDeviceCount(&deviceCount));
@@ -188,32 +181,32 @@ beta_fit_gpu_external(
      ********************************/
     einsum_offsetT[me] = EinsumWrapper(std::string{"ij->ji"},
                                        {(int)genesBatch, (int)cells},
-				       {});
-    einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ik,jk->ij"},
-                                       {(int)cells, (int)features},
-				       {(int)genesBatch, (int)features});
+				       {}); //forse non serve piu
+    einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ki,kj->ij"},
+                                       {(int)features, (int)cells},
+				       {(int)features, (int)genesBatch}); //OK
     einsum_w_qT[me] = EinsumWrapper( std::string{"ij->ji"},
-				     {(int)cells, (int)genesBatch},
-			      {});
-    einsum_A[me] = EinsumWrapper(std::string{"cf,gc->gfc"},
-                                 {(int)cells, (int)features},
-				 {(int)genesBatch, (int)cells});
-    einsum_B[me] = EinsumWrapper( std::string{"gfc,ck->gfk"},
+				     {(int)genesBatch, (int)cells},
+				     {}); //ok
+    einsum_A[me] = EinsumWrapper(std::string{"fc,cg->gfc"},
+                                 {(int)features, (int)cells},
+				 {(int)cells, (int)genesBatch}); //ok
+    einsum_B[me] = EinsumWrapper( std::string{"gfc,kc->gfk"},
 			  {(int)genesBatch, (int)features, (int)cells},
-				  {(int)cells, (int)features});
+				  {(int)features, (int)cells}); //ok
     einsum_Bk[me] = EinsumWrapper ( std::string{"gfc,g->gfc"},
                           {(int)genesBatch, (int)features, (int)features},
-				    {(int)genesBatch});
-    einsum_C[me] = EinsumWrapper ( std::string{"cf,gc->gf"},
-			  {(int)cells, (int)features},
-				   {(int)genesBatch, (int)cells});
+				    {(int)genesBatch}); //ok
+    einsum_C[me] = EinsumWrapper ( std::string{"cf,cg->fg"},
+			  {(int)cells, (int)features}, 
+				   {(int)cells, (int)genesBatch}); //ok
     einsum_last[me] = EinsumWrapper ( std::string{"gk,gf->gf"},
 			      {(int)genesBatch, 1},
-				      {(int)genesBatch, (int)features});
+				      {(int)features, (int)genesBatch}); //ok
     einsum_delta[me] =
-        EinsumWrapper(std::string{"gfk,gk->gf"},
+        EinsumWrapper(std::string{"gfk,kg->fg"},
                       {(int)genesBatch, (int)features, (int)features},
-                      {(int)genesBatch, (int)features});
+                      {(int)features, (int)genesBatch});
 
     /******************************
      * This allocate the workspace and the output tensor
@@ -293,8 +286,8 @@ beta_fit_gpu_external(
 
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
-			  (genesBatch + threads2D.y - 1) / threads2D.y);
-	    process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_qT[me], mu_g[me],
+			  (genesBatch + threads2D.y - 1) / threads2D.y); //VA CAMBIATO
+	    process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_qT[me], mu_g[me], //va cambiato
 					       genesBatch, cells);
             elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_qT[me],
                                                  genesBatch * cells);
