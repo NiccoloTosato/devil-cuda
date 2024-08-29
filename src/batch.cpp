@@ -82,7 +82,7 @@ beta_fit_gpu_external(
         mu_beta_host,
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
         offset_host,
-    Eigen::VectorXf k_host, int max_iter, float eps) {
+    Eigen::VectorXf k_host, int max_iter, float eps,int batch_size) {
   
 
   /******************************
@@ -92,7 +92,7 @@ beta_fit_gpu_external(
   const std::size_t cells(X_host.rows());
   const std::size_t features(X_host.cols());
 
-  std::size_t genesBatch = 16;
+  std::size_t genesBatch = batch_size;
   
   /*******************************
    * Load from disk

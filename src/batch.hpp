@@ -15,7 +15,7 @@ beta_fit_gpu_external(
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
         mu_beta_host,
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> offset_host,
-Eigen::VectorXf k_host, int max_iter, float eps);
+    Eigen::VectorXf k_host, int max_iter, float eps,int batch_size);
 
 void hello();
 
