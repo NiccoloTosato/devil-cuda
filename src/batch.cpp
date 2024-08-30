@@ -31,7 +31,7 @@ struct CudaDeleter {
 __global__ void printMatrix(const int rows,const int cols, float* const matrix) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-	  printf("%2.4f ", matrix[i*cols+j]);
+	  printf("%2.4f ", matrix[j*rows+i]);
         }
         printf("\n");
     }
@@ -53,13 +53,13 @@ void toGPU(auto vec,float* const vec_gpu) {
 //Eigen::MatrixXf beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
 beta_fit_gpu_external(
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
         Y_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
         X_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
         mu_beta_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> const &
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
         offset_host,
     Eigen::VectorXf const & kk_host, int max_iter, float eps,int batch_size) {
   
@@ -69,11 +69,30 @@ beta_fit_gpu_external(
   const std::size_t genes(Y_host.cols());
   const std::size_t cells(X_host.cols());
   const std::size_t features(X_host.rows());
+
+  std::cout << "X {"<<X_host.rows()<<","<<X_host.cols() <<"}\n";
+  std::cout << "Y {" << Y_host.rows() << "," << Y_host.cols() << "}\n";
+  std::cout << "offset {"<<offset_host.rows()<<","<<offset_host.cols() <<"}\n";
+  std::cout << "mu_beta {" << mu_beta_host.rows()  << "," << mu_beta_host.cols() << "}\n";
+  std::cout << "K {" << kk_host.size() << "," << 1 << "}\n";
+  std::cout << "Genes" << genes <<std::endl;
+  std::cout << "Cells" << cells <<std::endl;
+  std::cout << "Features" << features <<std::endl;
   std::size_t genesBatch = batch_size;
-  
-  /*******************************
+  // std::cout << offset_host << std::endl;
+    /*******************************
    * Load from disk
    ******************************/
+  /*
+  std::cout << "OUTPUT OFFSET " << std::endl;
+  std::cout << "OUTPUT {"<<offset_host.rows()<<","<<offset_host.cols()<<"}" <<
+std::endl; std::cout << "OUTPUT OFFSET " << std::endl; for (int i = 0; i < cells
+; ++i) { for (int j = 0; j < genesBatch;++j) { std::cout <<
+offset_host.data()+j*cells+i << " " ;
+    }
+    std::cout << std::endl;
+  }
+  */
   Eigen::VectorXf k_host(kk_host.size());
   for (int i=0;i<genes;++i){
     k_host[i] = 1 / kk_host[i];
@@ -87,11 +106,6 @@ beta_fit_gpu_external(
   cudaGetDeviceProperties(&deviceProp, 0);
   std::cout << "Device " << 0 << ": " << deviceProp.name << std::endl;
   std::cout << "  Compute capability: " << deviceProp.major << "." << deviceProp.minor << std::endl;
-  std::cout << "X {"<<features<<","<<cells <<"}\n";
-  std::cout << "Y {" << cells << "," << genes << "}\n";
-  std::cout << "offset {"<<cells<<","<<genes <<"}\n";
-  std::cout << "mu_beta {" << features << "," << genes << "}\n";
-  std::cout << "K {" << genes << "," << 1 << "}\n";
 
   int deviceCount = 0;
   CUDA_CHECK(cudaGetDeviceCount(&deviceCount));
@@ -180,7 +194,7 @@ beta_fit_gpu_external(
      * Initialize the Tensor object, this doesn't allocate nothing ! 
      ********************************/
     einsum_offsetT[me] = EinsumWrapper(std::string{"ij->ji"},
-                                       {(int)genesBatch, (int)cells},
+                                       {(int)cells, (int)genesBatch},
 				       {}); //forse non serve piu
     einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ki,kj->ij"},
                                        {(int)features, (int)cells},
@@ -204,7 +218,7 @@ beta_fit_gpu_external(
 			      {(int)genesBatch, 1},
 				      {(int)features, (int)genesBatch}); //ok
     einsum_delta[me] =
-        EinsumWrapper(std::string{"gfk,kg->fg"},
+      EinsumWrapper(std::string{"gfk,kg->fg"},
                       {(int)genesBatch, (int)features, (int)features},
                       {(int)features, (int)genesBatch});
 
@@ -225,7 +239,6 @@ beta_fit_gpu_external(
     /******************************
      * Allocate Zigma, The array of pointer to Zigma and Bk
      ******************************/
-
     // Use Managed memory to simply set the addresses
     CUDA_CHECK(cudaMallocManaged((void **) &(Zigma_pointer[me]), genesBatch * sizeof(float*)) );
     CUDA_CHECK(cudaMallocManaged((void **) &(Bk_pointer[me]), genesBatch * sizeof(float*)) );
@@ -250,12 +263,20 @@ beta_fit_gpu_external(
           CUDA_CHECK(cudaMemcpy(
               offset[me],
               offset_host.data() + i  * genesBatch * cells,
-              genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
-          einsum_offsetT[me].execute(cutensorH[me], offset[me], nullptr);
+              genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice)); //CORRETTO
+	  //einsum_offsetT[me].execute(cutensorH[me], offset[me], nullptr);
+
           CUDA_CHECK(cudaMemcpy(
-			     mu_beta[me], mu_beta_host.data() +  i *genesBatch * features,
-			     genesBatch*features* sizeof(float),
-			     cudaMemcpyHostToDevice));
+              mu_beta[me], mu_beta_host.data() + i * genesBatch * features,
+              genesBatch * features * sizeof(float), cudaMemcpyHostToDevice)); //CORRETTO
+
+          cudaDeviceSynchronize();
+	  std::cout << "mu_beta {"<<features<<","<<genesBatch <<"}\n";
+	  printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
+	  cudaDeviceSynchronize();
+	  std::cout << std::fflush;
+	  std::this_thread::sleep_for(std::chrono::seconds(15)); 
+
           CUDA_CHECK(cudaMemcpy(
 				k[me],  k_host.data() +  i *genesBatch*1,
 				genesBatch*1* sizeof(float),
@@ -276,19 +297,20 @@ beta_fit_gpu_external(
           std::size_t iter{0};
           auto t1 = std::chrono::high_resolution_clock::now();
 	  while (iter < max_iter && (norm/std::sqrt(genesBatch*features)) > eps) {
-	    ++iter;
+            ++iter;
+
             einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me]);
 	    dim3 threads1D(256);
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
-	    expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offsetT[me], w_q[me],
-					    genesBatch * cells);
-            einsum_w_qT[me].execute(cutensorH[me], w_q[me], nullptr);
+            expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
+                                            genesBatch * cells);
+            //einsum_w_qT[me].execute(cutensorH[me], w_q[me], nullptr);
 
 	    dim3 threads2D(16,16);
-	    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
-			  (genesBatch + threads2D.y - 1) / threads2D.y); //VA CAMBIATO
-	    process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_qT[me], mu_g[me], //va cambiato
-					       genesBatch, cells);
+	    dim3 blocks2D((genesBatch + threads2D.x - 1) / threads2D.x,
+			  (cells + threads2D.y - 1) / threads2D.y); //VA CAMBIATO
+	    process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_q[me], mu_g[me], //va cambiato
+					       cells, genesBatch);
             elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_qT[me],
                                                  genesBatch * cells);
             einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
