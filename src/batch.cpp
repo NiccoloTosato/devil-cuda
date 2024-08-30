@@ -196,9 +196,9 @@ offset_host.data()+j*cells+i << " " ;
     einsum_offsetT[me] = EinsumWrapper(std::string{"ij->ji"},
                                        {(int)cells, (int)genesBatch},
 				       {}); //forse non serve piu
-    einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ki,kj->ij"},
-                                       {(int)features, (int)cells},
-				       {(int)features, (int)genesBatch}); //OK
+    einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ik,jk->ji"},
+                                       {(int)cells, (int)features},
+				       {(int)genesBatch, (int)features}); //OK
     einsum_w_qT[me] = EinsumWrapper( std::string{"ij->ji"},
 				     {(int)genesBatch, (int)cells},
 				     {}); //ok
@@ -298,13 +298,16 @@ offset_host.data()+j*cells+i << " " ;
             expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
                                             genesBatch * cells);
             //einsum_w_qT[me].execute(cutensorH[me], w_q[me], nullptr);
-	  cudaDeviceSynchronize();
-	  std::cout << "cg_tmp2 {"<<cells<<","<< genesBatch <<"}\n";
+	    if(me==0) {
+          cudaDeviceSynchronize();
+	  std::cout << ",cg_tmp2 {"<<cells<<","<< genesBatch <<"}\n";
 	  printMatrix<<<1, 1>>>(cells, genesBatch, cg_tmp2[me]);
 	  cudaDeviceSynchronize();
 	  std::cout << std::fflush;
-	  std::this_thread::sleep_for(std::chrono::seconds(15)); 
 
+            } else {
+	      	  std::this_thread::sleep_for(std::chrono::seconds(15)); 
+	    }
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((genesBatch + threads2D.x - 1) / threads2D.x,
 			  (cells + threads2D.y - 1) / threads2D.y); //VA CAMBIATO
