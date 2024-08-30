@@ -225,6 +225,44 @@ TEST(EinSum, Test5) {
     CUDA_CHECK(cudaFree(result_device));
 };
 
+// Test C-ordered
+TEST(EinSum, Test6_Corder) {
+  std::vector<float> a = {1,2,3,4,5,6};
+  std::vector<int> a_shape = {2, 3};
+  std::vector<float> b = {7,8,9,10,11,12};
+  std::vector<int> b_shape = {3, 2};
+  std::vector<float> result_exact = {58, 64,
+                                     139, 154};
+  float *result_device =
+      (float *)einSum(a, a_shape, b, b_shape, std::string{"ij,jk->ik"});
+  std::vector<float> result(result_exact.size());
+  cudaMemcpy(&result[0], result_device, result_exact.size() * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+  for (int i = 0; i < result_exact.size(); i++)
+    EXPECT_NEAR(result[i], result_exact[i], 1E-6);
+    CUDA_CHECK(cudaFree(result_device));
+};
+
+
+TEST(EinSum, Test6_Forder) {
+  std::vector<float> a = {1,4,2,5,3,6};
+  std::vector<int> a_shape = {3, 2};
+  std::vector<float> b = {7,9,11,8,10,12};
+  std::vector<int> b_shape = {2, 3};
+  std::vector<float> result_exact = {58, 64,
+                                     139, 154};
+  float *result_device =
+      (float *)einSum(a, a_shape, b, b_shape, std::string{"ki,jk->ij"});
+  std::vector<float> result(result_exact.size());
+  cudaMemcpy(&result[0], result_device, result_exact.size() * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+  for (int i = 0; i < result_exact.size(); i++)
+    EXPECT_NEAR(result[i], result_exact[i], 1E-6);
+    CUDA_CHECK(cudaFree(result_device));
+};
+
+
+
 TEST(EinSum, Transpose1) {
     std::vector<float> a = { 1.0f,2.0f,3.0f,4.0f};
     std::vector<int> a_shape = {2,2};
@@ -275,6 +313,7 @@ TEST(EinSum, Broadcast1) {
     EXPECT_NEAR(result[i], result_exact[i], 1E-6);
     CUDA_CHECK(cudaFree(result_device));
 };
+
 
 TEST(EinSum, Broadcast2) {
   std::vector<float> a = {1.0f,2.0f,3.0f,4,5,6,1.0f,2.0f,3.0f,4,5,6, };
