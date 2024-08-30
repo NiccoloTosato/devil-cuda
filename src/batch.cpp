@@ -298,16 +298,28 @@ offset_host.data()+j*cells+i << " " ;
             expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
                                             genesBatch * cells);
             //einsum_w_qT[me].execute(cutensorH[me], w_q[me], nullptr);
-	    if(me==0) {
+            /*
+            if(me==0) {
           cudaDeviceSynchronize();
-	  std::cout << ",cg_tmp2 {"<<cells<<","<< genesBatch <<"}\n";
-	  printMatrix<<<1, 1>>>(cells, genesBatch, cg_tmp2[me]);
-	  cudaDeviceSynchronize();
-	  std::cout << std::fflush;
+          std::cout << ",cg_tmp2 {"<<cells<<","<< genesBatch <<"}\n";
+          printMatrix<<<1, 1>>>(cells, genesBatch, cg_tmp2[me]);
+          cudaDeviceSynchronize();
+          std::cout << std::fflush;
 
             } else {
-	      	  std::this_thread::sleep_for(std::chrono::seconds(15)); 
-	    }
+                  std::this_thread::sleep_for(std::chrono::seconds(15));
+            }
+            */
+	    if(me==0) {
+	      cudaDeviceSynchronize();
+	      std::cout << ",w_q {"<<cells<<","<< genesBatch <<"}\n";
+	      printMatrix<<<1, 1>>>(cells, genesBatch, w_q[me]);
+	      cudaDeviceSynchronize();
+	      std::cout << std::fflush;
+            } else {
+                  std::this_thread::sleep_for(std::chrono::seconds(15));
+            }
+
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((genesBatch + threads2D.x - 1) / threads2D.x,
 			  (cells + threads2D.y - 1) / threads2D.y); //VA CAMBIATO
