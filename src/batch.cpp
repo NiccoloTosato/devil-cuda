@@ -193,18 +193,18 @@ offset_host.data()+j*cells+i << " " ;
     /*********************************
      * Initialize the Tensor object, this doesn't allocate nothing ! 
      ********************************/
-    einsum_offsetT[me] = EinsumWrapper(std::string{"ij->ji"},
-                                       {(int)cells, (int)genesBatch},
-				       {}); //forse non serve piu
+    einsum_offsetT[me] =
+        EinsumWrapper(std::string{"ij->ji"}, {(int)cells, (int)genesBatch},
+                      {}); // NON SERVE PIU
     einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ik,jk->ji"},
                                        {(int)cells, (int)features},
-				       {(int)genesBatch, (int)features}); //OK
+				       {(int)genesBatch, (int)features}); //E" CORRETTO
     einsum_w_qT[me] = EinsumWrapper( std::string{"ij->ji"},
 				     {(int)genesBatch, (int)cells},
-				     {}); //ok
-    einsum_A[me] = EinsumWrapper(std::string{"fc,cg->gfc"},
-                                 {(int)features, (int)cells},
-				 {(int)cells, (int)genesBatch}); //ok
+				     {}); // NON SERVE PIU!!!!!!!!!!!!!!
+    einsum_A[me] = EinsumWrapper(std::string{"cf,gc->fgc"},
+                                 {(int)cells, (int)features},
+				 {(int)genesBatch, (int)cells}); //ok
     einsum_B[me] = EinsumWrapper( std::string{"gfc,kc->gfk"},
 			  {(int)genesBatch, (int)features, (int)cells},
 				  {(int)features, (int)cells}); //ok
@@ -309,25 +309,51 @@ offset_host.data()+j*cells+i << " " ;
             } else {
                   std::this_thread::sleep_for(std::chrono::seconds(15));
             }
-            */
-	    if(me==0) {
-	      cudaDeviceSynchronize();
-	      std::cout << ",w_q {"<<cells<<","<< genesBatch <<"}\n";
-	      printMatrix<<<1, 1>>>(cells, genesBatch, w_q[me]);
-	      cudaDeviceSynchronize();
-	      std::cout << std::fflush;
+
+            if(me==0) {
+              cudaDeviceSynchronize();
+              std::cout << ",w_q {"<<cells<<","<< genesBatch <<"}\n";
+              printMatrix<<<1, 1>>>(cells, genesBatch, w_q[me]);
+              cudaDeviceSynchronize();
+              std::cout << std::fflush;
             } else {
                   std::this_thread::sleep_for(std::chrono::seconds(15));
             }
-
+            */
 	    dim3 threads2D(16,16);
-	    dim3 blocks2D((genesBatch + threads2D.x - 1) / threads2D.x,
-			  (cells + threads2D.y - 1) / threads2D.y); //VA CAMBIATO
-	    process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_q[me], mu_g[me], //va cambiato
-					       cells, genesBatch);
-            elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_qT[me],
-                                                 genesBatch * cells);
+	    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
+			  (genesBatch + threads2D.y - 1) / threads2D.y); // STILL CONTINUA A FUNZIONARE
+            process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_q[me],
+                                               mu_g[me], // NON VA CAMBIATO NADA FUNZIONA BENISSIMO
+                                               genesBatch, cells);
+
+
+            elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_q[me],
+                                                 genesBatch * cells); //FUNZIONA ANCHE IN Forder
+	    /*
+            if(me==0) {
+              cudaDeviceSynchronize();
+              std::cout << ",mu_g {"<<cells<<","<< genesBatch <<"}\n";
+              printMatrix<<<1, 1>>>(cells, genesBatch, mu_g[me]);
+              cudaDeviceSynchronize();
+              std::cout << std::fflush;
+            } else {
+                  std::this_thread::sleep_for(std::chrono::seconds(15));
+		  } */
+
             einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
+            if (me == 0) {
+	      //fare funzione per printare direttamente A
+              cudaDeviceSynchronize();
+              std::cout << "A[0] {"<<genesBatch<<","<< features <<"}\n";
+              printMatrix<<<1, 1>>>(features, genesBatch, A[me]);
+              cudaDeviceSynchronize();
+              std::cout << std::fflush;
+            } else {
+                  std::this_thread::sleep_for(std::chrono::seconds(15));
+		  } 
+	    
+	    
             einsum_B[me].execute(cutensorH[me], A[me], X[me]);
             einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
             inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me],
