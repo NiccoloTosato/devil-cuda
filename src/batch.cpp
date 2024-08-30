@@ -95,7 +95,7 @@ offset_host.data()+j*cells+i << " " ;
   */
   Eigen::VectorXf k_host(kk_host.size());
   for (int i=0;i<genes;++i){
-    k_host[i] = 1 / kk_host[i];
+    k_host[i] = kk_host[i];
   }
   
   //  const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
@@ -270,17 +270,11 @@ offset_host.data()+j*cells+i << " " ;
               mu_beta[me], mu_beta_host.data() + i * genesBatch * features,
               genesBatch * features * sizeof(float), cudaMemcpyHostToDevice)); //CORRETTO
 
-          cudaDeviceSynchronize();
-	  std::cout << "mu_beta {"<<features<<","<<genesBatch <<"}\n";
-	  printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
-	  cudaDeviceSynchronize();
-	  std::cout << std::fflush;
-	  std::this_thread::sleep_for(std::chrono::seconds(15)); 
 
-          CUDA_CHECK(cudaMemcpy(
-				k[me],  k_host.data() +  i *genesBatch*1,
-				genesBatch*1* sizeof(float),
-                                cudaMemcpyHostToDevice));
+          CUDA_CHECK(cudaMemcpy(k[me], k_host.data() + i * genesBatch * 1,
+                                genesBatch * 1 * sizeof(float),
+                                cudaMemcpyHostToDevice)); // CORRETTO
+
           CUDA_CHECK(cudaMemcpy(
               Y[me], Y_host.data() +  i * genesBatch * cells ,
               genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
@@ -298,13 +292,18 @@ offset_host.data()+j*cells+i << " " ;
           auto t1 = std::chrono::high_resolution_clock::now();
 	  while (iter < max_iter && (norm/std::sqrt(genesBatch*features)) > eps) {
             ++iter;
-
             einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me]);
 	    dim3 threads1D(256);
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
             expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
                                             genesBatch * cells);
             //einsum_w_qT[me].execute(cutensorH[me], w_q[me], nullptr);
+	  cudaDeviceSynchronize();
+	  std::cout << "cg_tmp2 {"<<cells<<","<< genesBatch <<"}\n";
+	  printMatrix<<<1, 1>>>(cells, genesBatch, cg_tmp2[me]);
+	  cudaDeviceSynchronize();
+	  std::cout << std::fflush;
+	  std::this_thread::sleep_for(std::chrono::seconds(15)); 
 
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((genesBatch + threads2D.x - 1) / threads2D.x,
