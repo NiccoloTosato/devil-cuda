@@ -5,7 +5,7 @@ X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host,
 Eigen::VectorXf k_host, int max_iter, float eps);
 */
 
-Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>
 beta_fit_gpu_external(
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
         Y_host,
