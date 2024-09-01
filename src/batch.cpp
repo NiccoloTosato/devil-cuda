@@ -211,17 +211,17 @@ offset_host.data()+j*cells+i << " " ;
 				  {(int)cells, (int)features});  // ASSUMIAMO CHE SIA CORRETTO COSI, HYP
     einsum_Bk[me] = EinsumWrapper ( std::string{"gfc,g->gfc"},
                           {(int)genesBatch, (int)features, (int)features},
-				    {(int)genesBatch}); //ok
-    einsum_C[me] = EinsumWrapper ( std::string{"cf,cg->fg"},
+				    {(int)genesBatch}); // ASSUMIAMO CORRETTO
+    einsum_C[me] = EinsumWrapper ( std::string{"cf,gc->gf"},
 			  {(int)cells, (int)features}, 
-				   {(int)cells, (int)genesBatch}); //ok
-    einsum_last[me] = EinsumWrapper ( std::string{"gk,gf->gf"},
-			      {(int)genesBatch, 1},
-				      {(int)features, (int)genesBatch}); //ok
+				   {(int)genesBatch, (int)cells}); // ASSUMIAMO CORRETTO
+    einsum_last[me] = EinsumWrapper ( std::string{"g,gf->gf"},
+			      {(int)genesBatch},
+				      {(int)genesBatch, (int)features}); //ok
     einsum_delta[me] =
-      EinsumWrapper(std::string{"gfk,kg->fg"},
+      EinsumWrapper(std::string{"gfk,gk->gf"},
                       {(int)genesBatch, (int)features, (int)features},
-                      {(int)features, (int)genesBatch});
+                      {(int)genesBatch, (int)features});
 
     /******************************
      * This allocate the workspace and the output tensor
@@ -385,8 +385,8 @@ offset_host.data()+j*cells+i << " " ;
             if (me == 0) {
 	      //fare funzione per printare direttamente A
               cudaDeviceSynchronize();
-              std::cout << "Bk[0] {"<<features<<","<< features <<"}\n";
-              printMatrix<<<1, 1>>>(features,features, Zigma[me]);
+              std::cout << "Zigma[0] {"<<features<<","<< features <<"}\n";
+              printMatrix<<<1, 1>>>(features,features, Zigma_pointer[me][1]);
               cudaDeviceSynchronize();
               std::cout << std::fflush;
             } else {
@@ -395,8 +395,42 @@ offset_host.data()+j*cells+i << " " ;
 	    //FINO QUI FUNZIONA, 1/9/2024
 	    elementWiseSub<<<blocks1D,threads1D>>>(mu_g[me], genesBatch*cells);
 	    einsum_C[me].execute(cutensorH[me], X[me], mu_g[me]);
-            einsum_last[me].execute(cutensorH[me], k[me], C[me]);
-            einsum_delta[me].execute(cutensorH[me], Zigma[me], last[me]);
+            if (me == 0) {
+	      //fare funzione per printare direttamente A
+              cudaDeviceSynchronize();
+              std::cout << "C {"<<features<<","<< genesBatch <<"}\n";
+              printMatrix<<<1, 1>>>(features,genesBatch, C[me]);
+              cudaDeviceSynchronize();
+              std::cout << std::fflush;
+            } else {
+                  std::this_thread::sleep_for(std::chrono::seconds(15));
+		  } 
+            
+	    einsum_last[me].execute(cutensorH[me], k[me], C[me]);
+            if (me == 0) {
+	      //fare funzione per printare direttamente A
+              cudaDeviceSynchronize();
+              std::cout << "last {"<<features<<","<< genesBatch <<"}\n";
+              printMatrix<<<1, 1>>>(features,genesBatch, last[me]);
+              cudaDeviceSynchronize();
+              std::cout << std::fflush;
+            } else {
+                  std::this_thread::sleep_for(std::chrono::seconds(15));
+		  }
+
+	    einsum_delta[me].execute(cutensorH[me], Zigma[me], last[me]);
+	    if (me == 0) {
+	      //fare funzione per printare direttamente A
+              cudaDeviceSynchronize();
+              std::cout << "delta {"<<features<<","<< genesBatch <<"}\n";
+              printMatrix<<<1, 1>>>(features,genesBatch, delta[me]);
+              cudaDeviceSynchronize();
+              std::cout << std::fflush;
+            } else {
+                  std::this_thread::sleep_for(std::chrono::seconds(15));
+		  } 
+
+
 	    final1D<<<blocks1D,threads1D>>>(mu_beta[me],delta[me],genesBatch*features);
             cublasSnrm2(cublasH[me], genesBatch * features, delta[me], 1,
                         &norm);
