@@ -488,9 +488,9 @@ offset_host.data()+j*cells+i << " " ;
     //CUTENSOR_CHECK( cutensorDestroy(cutensorH) );
   }
   
-  //  std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
-  //  printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
-  //  cudaDeviceSynchronize();
+    std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
+    printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
+    cudaDeviceSynchronize();
 
   //std::cout << "Norm " << norm / std::sqrt(genes * features) << std::endl;
   Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> result(mu_beta_final.data(), genes,features);
