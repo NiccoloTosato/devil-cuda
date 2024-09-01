@@ -444,7 +444,7 @@ offset_host.data()+j*cells+i << " " ;
 	  }
 	  auto t2 = std::chrono::high_resolution_clock::now();
 	  auto elapsed{t2-t1};
-	  /*
+
           std::cout
               << std::chrono::duration<double, std::milli>(elapsed).count() /
                      iter
@@ -452,7 +452,7 @@ offset_host.data()+j*cells+i << " " ;
 	      std::cout << "mu_beta {"<<genesBatch<<","<<features <<"}\n";
 	      printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
 	      std::cout << std::flush;
-	  */
+
           cudaDeviceSynchronize();
 	  //	  std::this_thread::sleep_for(std::chrono::seconds(150));
           CUDA_CHECK(cudaMemcpy(mu_beta_final.data() +  i *genesBatch * features,
@@ -488,9 +488,7 @@ offset_host.data()+j*cells+i << " " ;
     //CUTENSOR_CHECK( cutensorDestroy(cutensorH) );
   }
   
-    std::cout << "mu_beta {"<<genes<<","<<features <<"}\n";
-    printMatrix<<<1, 1>>>( genes,features, mu_beta.get());
-    cudaDeviceSynchronize();
+
 
   //std::cout << "Norm " << norm / std::sqrt(genes * features) << std::endl;
   Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> result(mu_beta_final.data(), genes,features);
