@@ -96,7 +96,7 @@ offset_host.data()+j*cells+i << " " ;
   */
   Eigen::VectorXf k_host(kk_host.size());
   for (int i=0;i<genes;++i){
-    k_host[i] = kk_host[i];
+    k_host[i] = 1 / kk_host[i];
   }
   
   //  const auto mu_beta_host = readDatFile("../data/mu_beta.dat");
