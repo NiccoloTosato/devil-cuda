@@ -310,7 +310,6 @@ offset_host.data()+j*cells+i << " " ;
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
             expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
                                             genesBatch * cells);
-            //einsum_w_qT[me].execute(cutensorH[me], w_q[me], nullptr);
             /*
             if(me==0) {
           cudaDeviceSynchronize();
@@ -452,7 +451,6 @@ offset_host.data()+j*cells+i << " " ;
 
             final1D<<<blocks1D, threads1D>>>(mu_beta[me], delta[me],
                                              genesBatch * features);
-	    
             cublasSnrm2(cublasH[me], genesBatch * features, delta[me], 1,
                         &norm);
 	  }
