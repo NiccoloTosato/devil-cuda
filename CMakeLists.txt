@@ -24,8 +24,8 @@ find_package(CUDAToolkit REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(Eigen3 3.3 REQUIRED)
 
-include_directories(${CUTENSOR_HOME}/include/ ${CMAKE_SOURCE_DIR}/include)
-link_directories( ${CUTENSOR_HOME}/lib/cutensor)
+include_directories(${CUTENSOR_HOME}/include/ ${CMAKE_SOURCE_DIR}/include ~/.local/include/ ~/.local/include/cutensor)
+link_directories( ${CUTENSOR_HOME}/lib/cutensor ~/.local/lib/cutensor)
 
 set( BETA_FIT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/inverse.cpp
 			${CMAKE_CURRENT_SOURCE_DIR}/src/einsum.cpp

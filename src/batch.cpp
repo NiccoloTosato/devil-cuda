@@ -472,16 +472,14 @@ offset_host.data()+j*cells+i << " " ;
 	  }
 	  auto t2 = std::chrono::high_resolution_clock::now();
 	  auto elapsed{t2-t1};
-	  /*
-          std::cout
+/*          std::cout
               << std::chrono::duration<double, std::milli>(elapsed).count() /
                      iter
               << " ms [avg iter time]" << std::endl;
 	  //	  std::cout << " iter " << iter << "\nmu_beta {"<<genesBatch<<","<<features <<"}\n";
 	  //   printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
 	  //   std::cout << std::flush;
-
-	  */
+*/
           cudaDeviceSynchronize();
 	  //	  std::this_thread::sleep_for(std::chrono::seconds(150));
           CUDA_CHECK(cudaMemcpy(mu_beta_final.data() +  i *genesBatch * features,
