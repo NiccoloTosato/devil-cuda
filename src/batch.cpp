@@ -144,13 +144,13 @@ offset_host.data()+j*cells+i << " " ;
   std::vector<float *> w_q(deviceCount);
   std::vector<float *> mu_g(deviceCount);
 
-  // std::vector<float **> Zigma_pointer(deviceCount);
-  // std::vector<float **> Bk_pointer(deviceCount);
-  // std::vector<float *> Zigma;
+   std::vector<float **> Zigma_pointer(deviceCount);
+   std::vector<float **> Bk_pointer(deviceCount);
+   std::vector<float *> Zigma(deviceCount);
   //this will become again a series of std::vector
-  float ***Zigma_pointer = (float***) malloc(sizeof(float **) * deviceCount);
-  float ***Bk_pointer = (float***) malloc(sizeof(float **) * deviceCount);
-  float** Zigma=(float**)malloc(sizeof(float*) * deviceCount);
+  //float ***Zigma_pointer = (float***) malloc(sizeof(float **) * deviceCount);
+  //float ***Bk_pointer = (float***) malloc(sizeof(float **) * deviceCount);
+  //float** Zigma=(float**)malloc(sizeof(float*) * deviceCount);
 
   //std::vector<float *>    w_qT(deviceCount);
   //std::vector<float *>    offsetT(deviceCount);
@@ -491,6 +491,7 @@ offset_host.data()+j*cells+i << " " ;
         }
       }
     }
+std::cout <<"GPU PART DONE" << std::endl;
     // free the memory
     CUDA_CHECK(cudaFree(Zigma[me]));
     CUDA_CHECK(cudaFree(Bk_pointer[me]));
