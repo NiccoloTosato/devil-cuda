@@ -125,9 +125,9 @@ offset_host.data()+j*cells+i << " " ;
   std::vector<cutensorHandle_t> cutensorH(deviceCount);
 
   //this will call a dummy constructor, don't worry about initialization!
-  std::vector<EinsumWrapper> einsum_offsetT(deviceCount);
+  //std::vector<EinsumWrapper> einsum_offsetT(deviceCount);
   std::vector<EinsumWrapper> einsum_cg_tmp2(deviceCount);
-  std::vector<EinsumWrapper> einsum_w_qT(deviceCount);
+  //std::vector<EinsumWrapper> einsum_w_qT(deviceCount);
   std::vector<EinsumWrapper> einsum_A(deviceCount);
   std::vector<EinsumWrapper> einsum_B(deviceCount);
   std::vector<EinsumWrapper> einsum_Bk(deviceCount);
@@ -152,8 +152,8 @@ offset_host.data()+j*cells+i << " " ;
   float ***Bk_pointer = (float***) malloc(sizeof(float **) * deviceCount);
   float** Zigma=(float**)malloc(sizeof(float*) * deviceCount);
 
-  std::vector<float *>    w_qT(deviceCount);
-  std::vector<float *>    offsetT(deviceCount);
+  //std::vector<float *>    w_qT(deviceCount);
+  //std::vector<float *>    offsetT(deviceCount);
   std::vector<float *> cg_tmp2(deviceCount);
   std::vector<float *>    A(deviceCount);
   std::vector<float *>    B(deviceCount);
@@ -198,15 +198,15 @@ offset_host.data()+j*cells+i << " " ;
     /*********************************
      * Initialize the Tensor object, this doesn't allocate nothing ! 
      ********************************/
-    einsum_offsetT[me] =
-        EinsumWrapper(std::string{"ij->ji"}, {(int)cells, (int)genesBatch},
-                      {}); // NON SERVE PIU
+    //einsum_offsetT[me] =
+    //    EinsumWrapper(std::string{"ij->ji"}, {(int)cells, (int)genesBatch},
+    //                  {}); // NON SERVE PIU
     einsum_cg_tmp2[me] = EinsumWrapper(std::string{"ik,jk->ji"},
                                        {(int)cells, (int)features},
 				       {(int)genesBatch, (int)features}); //E" CORRETTO
-    einsum_w_qT[me] = EinsumWrapper( std::string{"ij->ji"},
-				     {(int)genesBatch, (int)cells},
-				     {}); // NON SERVE PIU!!!!!!!!!!!!!!
+    //einsum_w_qT[me] = EinsumWrapper( std::string{"ij->ji"},
+    //				     {(int)genesBatch, (int)cells},
+    //				     {}); // NON SERVE PIU!!!!!!!!!!!!!!
     einsum_A[me] = EinsumWrapper(std::string{"cf,gc->cfg"},
                                  {(int)cells, (int)features},
 				 {(int)genesBatch, (int)cells}); // ASSUMIAMO CHE SIA CORRETTO COSI, HYP
@@ -230,8 +230,8 @@ offset_host.data()+j*cells+i << " " ;
     /******************************
      * This allocate the workspace and the output tensor
      ******************************/
-    w_qT[me]=einsum_w_qT[me].allocate();
-    offsetT[me] = einsum_offsetT[me].allocate();
+    //w_qT[me]=einsum_w_qT[me].allocate();
+    //offsetT[me] = einsum_offsetT[me].allocate();
     cg_tmp2[me] = einsum_cg_tmp2[me].allocate();
     A[me] = einsum_A[me].allocate();
     B[me] = einsum_B[me].allocate();
@@ -255,7 +255,19 @@ offset_host.data()+j*cells+i << " " ;
     }
 
     cudaDeviceSynchronize();
-    
+
+#pragma omp single
+    {
+      std::size_t free_mem, total_mem;
+
+    // Get the amount of free and total memory
+      CUDA_CHECK( cudaMemGetInfo(&free_mem, &total_mem) );
+      std::cout << "Free memory: " << free_mem / (1024 * 1024) << " MB"
+                << std::endl;
+      std::cout << "Used memory: " << (total_mem-free_mem) / (1024 * 1024) << " MB" << std::endl;
+    std::cout << "Total memory: " << total_mem / (1024 * 1024) << " MB" << std::endl;
+
+    }
 #pragma omp single
     { //here we will generate the work ! 
       for (int i = 0; i < BatchCount; ++i) {
@@ -485,8 +497,6 @@ offset_host.data()+j*cells+i << " " ;
     CUDA_CHECK(cudaFree(Zigma[me]));
     CUDA_CHECK(cudaFree(Bk_pointer[me]));
     CUDA_CHECK(cudaFree(Zigma_pointer[me]));
-    CUDA_CHECK(cudaFree(w_qT[me]));
-    CUDA_CHECK(cudaFree(offsetT[me]));
     CUDA_CHECK(cudaFree(cg_tmp2[me]));
     CUDA_CHECK(cudaFree(A[me]));
     CUDA_CHECK(cudaFree(B[me]));
