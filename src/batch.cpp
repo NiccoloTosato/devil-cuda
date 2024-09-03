@@ -51,7 +51,6 @@ void toGPU(auto vec,float* const vec_gpu) {
   CUDA_CHECK( cudaMemcpy(vec_gpu, vec.data(), vec.size() * sizeof(float), cudaMemcpyHostToDevice) );
 }
 
-//Eigen::MatrixXf beta_fit_gpu_external(Eigen::MatrixXf Y_host, Eigen::MatrixXf X_host, Eigen::MatrixXf mu_beta_host, Eigen::MatrixXf offset_host, Eigen::VectorXf k_host, int max_iter, float eps) {
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>
 beta_fit_gpu_external(
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
@@ -164,7 +163,6 @@ beta_fit_gpu_external(
     CUDA_CHECK( cudaMalloc((void**)&offset[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&mu_beta[me], genesBatch*features*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&k[me], genesBatch*sizeof(float)) );
-    //CUDA_CHECK( cudaMalloc((void**)&cg_tmp[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&w_q[me], genesBatch*cells*sizeof(float)) );
     CUDA_CHECK( cudaMalloc((void**)&mu_g[me], genesBatch*cells*sizeof(float)) );
 
@@ -233,7 +231,6 @@ beta_fit_gpu_external(
       for (int i = 0; i < BatchCount; ++i) {
 #pragma omp task default(shared)
         {
-
 	  int me=omp_get_thread_num();
           // copy the necessary data!
           CUDA_CHECK(cudaMemcpy(
@@ -274,14 +271,14 @@ beta_fit_gpu_external(
                                             genesBatch * cells);
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
-			  (genesBatch + threads2D.y - 1) / threads2D.y); // STILL CONTINUA A FUNZIONARE
+			  (genesBatch + threads2D.y - 1) / threads2D.y); 
             process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_q[me],
-                                               mu_g[me], // NON VA CAMBIATO NADA FUNZIONA BENISSIMO
+                                               mu_g[me], 
                                                genesBatch, cells);
 
 
             elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_q[me],
-                                                 genesBatch * cells); //FUNZIONA ANCHE IN Forder
+                                                 genesBatch * cells); 
 
             einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
             einsum_B[me].execute(cutensorH[me], A[me], X[me]);
@@ -330,7 +327,13 @@ beta_fit_gpu_external(
     CUDA_CHECK(cudaFree(Bk[me]));
     CUDA_CHECK(cudaFree(delta[me]));
     CUDA_CHECK(cudaFree(last[me]));
-
+    CUDA_CHECK(cudaFree(X[me]));
+    CUDA_CHECK(cudaFree(Y[me]));
+    CUDA_CHECK(cudaFree(offset[me]));
+    CUDA_CHECK(cudaFree(mu_beta[me]));
+    CUDA_CHECK(cudaFree(w_q[me]));
+    CUDA_CHECK(cudaFree(mu_g[me]));
+    CUDA_CHECK(cudaFree(k[me]));
     /*********************
      * Destroy handles
      ********************/

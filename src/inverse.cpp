@@ -28,13 +28,6 @@ int inverseMatrix2(cublasHandle_t cublasH, float *A_device[], float *A_inv_devic
   CUDA_CHECK(cudaMallocManaged(&pivot, sizeof(int)*n*batchSize));
   CUDA_CHECK(cudaMallocManaged(&info, sizeof(int)*batchSize));
 
-  //create solver,and get buffersize
-  //  CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
-  //CUSOLVER_CHECK(cusolverDnSgetrf_bufferSize(cusolverH, n, n, A_device, n, &lwork));
-  
-  //allocation for workspace
-  //CUDA_CHECK(cudaMallocManaged(&workspace, sizeof(float) * lwork));
-
   //factorize !
   CUBLAS_CHECK( cublasSgetrfBatched(cublasH,
                                    n,
@@ -62,15 +55,8 @@ int inverseMatrix2(cublasHandle_t cublasH, float *A_device[], float *A_inv_devic
     }
   }
 
-  //use this to allocate the necessary space !!!!
-  //cusolverDnSgetrf(cusolverH, n, n, A_device, n, d_work, d_Ipiv, d_info);
-
-  //
-  // pivot, A_inv_device, // This should be the identity matrix n, info) );
-  cudaFree(pivot);
-  cudaFree(info);
-
-
+  CUDA_CHECK(cudaFree(pivot));
+  CUDA_CHECK(cudaFree(info));
   
   return 0; 
   
