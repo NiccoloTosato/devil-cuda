@@ -309,7 +309,7 @@ struct Einsum
                     handle,
                     &planPref,
                     CUTENSOR_ALGO_DEFAULT,
-                    CUTENSOR_JIT_MODE_DEFAULT));
+                    CUTENSOR_JIT_MODE_NONE));
 
         cutensorPlan_t plan;
         cutensorOperationDescriptor_t desc;
