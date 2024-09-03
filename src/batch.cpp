@@ -247,7 +247,7 @@ beta_fit_gpu_external(
           CUDA_CHECK(cudaMemcpy(k[me], k_host.data() + i * genesBatch * 1,
                                 genesBatch * 1 * sizeof(float),
                                 cudaMemcpyHostToDevice)); // CORRETTO
-
+	  
           CUDA_CHECK(cudaMemcpy(
               Y[me], Y_host.data() +  i * genesBatch * cells ,
               genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice));
@@ -270,28 +270,53 @@ beta_fit_gpu_external(
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
             expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
                                             genesBatch * cells);
+	    cudaError_t err = cudaGetLastError();
+	    CUDA_CHECK(err);
 	    dim3 threads2D(16,16);
 	    dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
 			  (genesBatch + threads2D.y - 1) / threads2D.y); 
             process2D<<<blocks2D, threads2D>>>(k[me], Y[me], w_q[me],
                                                mu_g[me], 
                                                genesBatch, cells);
+	    err = cudaGetLastError();
+	    CUDA_CHECK(err);
 
 
             elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_q[me],
                                                  genesBatch * cells); 
+err = cudaGetLastError();
+	    CUDA_CHECK(err);
 
             einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
             einsum_B[me].execute(cutensorH[me], A[me], X[me]);
             einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
             inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me],
                            features, genesBatch);
-	    elementWiseSub<<<blocks1D,threads1D>>>(mu_g[me], genesBatch*cells);
+            elementWiseSub<<<blocks1D, threads1D>>>(mu_g[me],
+                                                    genesBatch * cells);
+	    err = cudaGetLastError();
+	    CUDA_CHECK(err);
+
+            einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
+            einsum_B[me].execute(cutensorH[me], A[me], X[me]);
+            einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
+            inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me],
+                           features, genesBatch);
+
             einsum_C[me].execute(cutensorH[me], X[me], mu_g[me]);
             einsum_last[me].execute(cutensorH[me], k[me], C[me]);
             einsum_delta[me].execute(cutensorH[me], Zigma[me], last[me]);
             final1D<<<blocks1D, threads1D>>>(mu_beta[me], delta[me],
                                              genesBatch * features);
+	    err = cudaGetLastError();
+	    CUDA_CHECK(err);
+
+            einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
+            einsum_B[me].execute(cutensorH[me], A[me], X[me]);
+            einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
+            inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me],
+                           features, genesBatch);
+
             cublasSnrm2(cublasH[me], genesBatch * features, delta[me], 1,
                         &norm);
 	  }
