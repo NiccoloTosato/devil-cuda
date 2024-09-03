@@ -1,3 +1,4 @@
+
 /*  
  * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
  * 
@@ -508,6 +509,8 @@ public:
     // allocate workspace
     HANDLE_CUDA_ERROR(
         cudaMalloc(&(this->workspace_raw), this->internalEinsum.getWorksize()));
+    //std::cout << "Allocated " << this->internalEinsum.getWorksize() / (1024*1024*1024) <<" GB" << std::endl;
+  
     return this->output_raw;
   }
 
