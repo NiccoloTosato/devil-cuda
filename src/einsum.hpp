@@ -493,11 +493,11 @@ public:
   ~EinsumWrapper() {
       if (this->workspace_raw != nullptr) {
 	//std::cout << "Distruttore invocato !!!! " << this->workspace_raw << std::endl;
-	HANDLE_CUDA_ERROR(cudaFree(this->workspace_raw));
+	//HANDLE_CUDA_ERROR(cudaFree(this->workspace_raw));
       }
   }
 
-  float *allocate() {
+  float *allocate_output() {
     auto C_shape = this->internalEinsum.getOutputShape();
     size_t totalElementsC = 1;
     for (const auto e : C_shape) {
@@ -507,15 +507,18 @@ public:
     //allocate output
     HANDLE_CUDA_ERROR(cudaMalloc(&(this->output_raw), sizeof(float) * totalElementsC));
     // allocate workspace
-    HANDLE_CUDA_ERROR(
-        cudaMalloc(&(this->workspace_raw), this->internalEinsum.getWorksize()));
+    //    HANDLE_CUDA_ERROR(
+    //    cudaMalloc(&(this->workspace_raw), this->internalEinsum.getWorksize()));
     //std::cout << "Allocated " << this->internalEinsum.getWorksize() / (1024*1024*1024) <<" GB" << std::endl;
   
     return this->output_raw;
   }
+  auto workspace_size() {
+    return this->internalEinsum.getWorksize();
+  }
 
   void execute(cutensorHandle_t handle,const float* A_device,
-	       const float* B_device) {
-    auto ret = this->internalEinsum.execute(handle, A_device, B_device, this->output_raw, this->workspace_raw, 0);
+	       const float* B_device, float* workspace) {
+    auto ret = this->internalEinsum.execute(handle, A_device, B_device, this->output_raw, workspace, 0);
   }
 };

@@ -20,7 +20,7 @@
 #include "cutensor.h"
 #include <omp.h>
 #include <Eigen/Dense>
-
+#include <list>
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
@@ -121,6 +121,7 @@ beta_fit_gpu_external(
   std::vector<float *> cg_tmp(deviceCount);
   std::vector<float *> w_q(deviceCount);
   std::vector<float *> mu_g(deviceCount);
+  std::vector<float *> workspace(deviceCount);
 
   std::vector<float **> Zigma_pointer(deviceCount);
   std::vector<float **> Bk_pointer(deviceCount);
@@ -194,15 +195,32 @@ beta_fit_gpu_external(
                       {(int)genesBatch, (int)features});
 
     /******************************
-     * This allocate the workspace and the output tensor
+     * This allocate the output tensor space
      ******************************/
-    cg_tmp2[me] = einsum_cg_tmp2[me].allocate();
-    A[me] = einsum_A[me].allocate();
-    B[me] = einsum_B[me].allocate();
-    C[me] = einsum_C[me].allocate();
-    Bk[me] = einsum_Bk[me].allocate();
-    delta[me] = einsum_delta[me].allocate();
-    last[me] = einsum_last[me].allocate();
+    cg_tmp2[me] = einsum_cg_tmp2[me].allocate_output();
+    A[me] = einsum_A[me].allocate_output();
+    B[me] = einsum_B[me].allocate_output();
+    C[me] = einsum_C[me].allocate_output();
+    Bk[me] = einsum_Bk[me].allocate_output();
+    delta[me] = einsum_delta[me].allocate_output();
+    last[me] = einsum_last[me].allocate_output();
+
+    /******************************
+     * This allocate the workspace
+     ******************************/
+    std::list<int> workspace_size;
+    workspace_size.push_back(einsum_cg_tmp2[me].workspace_size());
+    workspace_size.push_back(einsum_A[me].workspace_size());
+    workspace_size.push_back(einsum_B[me].workspace_size());
+    workspace_size.push_back(einsum_C[me].workspace_size());
+    workspace_size.push_back(einsum_Bk[me].workspace_size());
+    workspace_size.push_back(einsum_delta[me].workspace_size());
+    workspace_size.push_back(einsum_last[me].workspace_size());
+    auto maxSize =
+      * std::max_element(workspace_size.begin(), workspace_size.end());
+
+    CUDA_CHECK(cudaMalloc((void **)&workspace[me], maxSize));
+    
     /******************************
      * Allocate Zigma, The array of pointer to Zigma and Bk
      ******************************/
@@ -265,7 +283,7 @@ beta_fit_gpu_external(
           auto t1 = std::chrono::high_resolution_clock::now();
 	     while (iter < max_iter && (norm/std::sqrt(genesBatch*features)) > eps) {
             ++iter;
-            einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me]);
+            einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me],workspace[me]);
 	    dim3 threads1D(256);
 	    dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
             expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
@@ -281,15 +299,15 @@ beta_fit_gpu_external(
             elementWise<<<blocks1D, threads1D>>>(mu_g[me], w_q[me],
                                                  genesBatch * cells);
 
-            einsum_A[me].execute(cutensorH[me], X[me], mu_g[me]);
-            einsum_B[me].execute(cutensorH[me], A[me], X[me]);
-            einsum_Bk[me].execute(cutensorH[me], B[me], k[me]);
+            einsum_A[me].execute(cutensorH[me], X[me], mu_g[me],workspace[me]);
+            einsum_B[me].execute(cutensorH[me], A[me], X[me],workspace[me]);
+            einsum_Bk[me].execute(cutensorH[me], B[me], k[me],workspace[me]);
             inverseMatrix2(cublasH[me], Bk_pointer[me], Zigma_pointer[me],
                            features, genesBatch);
 	    elementWiseSub<<<blocks1D,threads1D>>>(mu_g[me], genesBatch*cells);
-            einsum_C[me].execute(cutensorH[me], X[me], mu_g[me]);
-            einsum_last[me].execute(cutensorH[me], k[me], C[me]);
-            einsum_delta[me].execute(cutensorH[me], Zigma[me], last[me]);
+            einsum_C[me].execute(cutensorH[me], X[me], mu_g[me],workspace[me]);
+            einsum_last[me].execute(cutensorH[me], k[me], C[me],workspace[me]);
+            einsum_delta[me].execute(cutensorH[me], Zigma[me], last[me],workspace[me]);
             final1D<<<blocks1D, threads1D>>>(mu_beta[me], delta[me],
                                              genesBatch * features);
             cublasSnrm2(cublasH[me], genesBatch * features, delta[me], 1,
