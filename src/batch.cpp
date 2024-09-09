@@ -342,7 +342,7 @@ beta_fit_gpu_external(
 			     genesBatch*features* sizeof(float),
 			     cudaMemcpyDeviceToHost));
           cudaDeviceSynchronize();
-	  std::cout << "Batch " << i << "iter" << std::endl;
+	  std::cout << "Batch " << i << "iter" << iter << std::endl;
 	  std::fill(iterations.begin()  +  i *genesBatch , iterations.begin() +  +  (i+1) *genesBatch, iter);
             // copy back the data, this assume that I prepared something!
         }
