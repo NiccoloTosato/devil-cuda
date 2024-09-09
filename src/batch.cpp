@@ -314,13 +314,14 @@ beta_fit_gpu_external(
             //            cublasSnrm2(cublasH[me], genesBatch * features,
             //            delta[me], 1, &norm);
             int max_id;
-	    float max_value;
 
             CUBLAS_CHECK(cublasIsamax(cublasH[me], genesBatch * features,
                                       delta[me], 1, &max_id));
 	    //FORTRAN INDEX, start from 1;
             --max_id;
-	    CUDA_CHECK(cudaMemcpy(&norm, delta[me] + max_id, sizeof(float), cudaMemcpyDeviceToHost) );
+            CUDA_CHECK(cudaMemcpy(&norm, delta[me] + max_id, sizeof(float),
+                                  cudaMemcpyDeviceToHost));
+	    std::cout << norm << " ";
 	   }
 	  auto t2 = std::chrono::high_resolution_clock::now();
 	  auto elapsed{t2-t1};
