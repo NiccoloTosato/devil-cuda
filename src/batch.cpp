@@ -323,10 +323,11 @@ beta_fit_gpu_external(
             CUDA_CHECK(cudaMemcpy(&norm, delta[me] + max_id, sizeof(float),
                                   cudaMemcpyDeviceToHost));
 	    norm = std::abs(norm);
-	    std::cout << norm << " ";
+
 	   }
 	  auto t2 = std::chrono::high_resolution_clock::now();
-	  auto elapsed{t2-t1};
+          auto elapsed{t2 - t1};
+	  /*
           std::cout
               << std::chrono::duration<double, std::milli>(elapsed).count() /
                      iter
@@ -334,7 +335,7 @@ beta_fit_gpu_external(
 	  //	  std::cout << " iter " << iter << "\nmu_beta {"<<genesBatch<<","<<features <<"}\n";
 	  //   printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
 	  //   std::cout << std::flush;
-
+	  */
           cudaDeviceSynchronize();
           CUDA_CHECK(cudaMemcpy(mu_beta_final.data() +  i *genesBatch * features,
 			     mu_beta[me], 
