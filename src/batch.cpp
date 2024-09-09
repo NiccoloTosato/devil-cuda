@@ -367,7 +367,7 @@ std::cout <<"GPU PART DONE" << std::endl;
     CUDA_CHECK(cudaFree(w_q[me]));
     CUDA_CHECK(cudaFree(mu_g[me]));
     CUDA_CHECK(cudaFree(k[me]));
-    CUDA_CHEKC(cudaFree(workspace[me]));
+    CUDA_CHECK(cudaFree(workspace[me]));
     /*********************
      * Destroy handles
      ********************/
