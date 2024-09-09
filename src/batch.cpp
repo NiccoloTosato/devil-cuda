@@ -322,8 +322,8 @@ beta_fit_gpu_external(
             --max_id;
             CUDA_CHECK(cudaMemcpy(&norm, delta[me] + max_id, sizeof(float),
                                   cudaMemcpyDeviceToHost));
-	    norm = std::abs(norm);
-
+            norm = std::abs(norm);
+	    std::cout << norm << " ";
 	   }
 	  auto t2 = std::chrono::high_resolution_clock::now();
           auto elapsed{t2 - t1};
@@ -367,6 +367,7 @@ std::cout <<"GPU PART DONE" << std::endl;
     CUDA_CHECK(cudaFree(w_q[me]));
     CUDA_CHECK(cudaFree(mu_g[me]));
     CUDA_CHECK(cudaFree(k[me]));
+    CUDA_CHEKC(cudaFree(workspace[me]));
     /*********************
      * Destroy handles
      ********************/
