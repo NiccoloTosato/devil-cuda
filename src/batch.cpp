@@ -53,15 +53,16 @@ void toGPU(auto vec,float* const vec_gpu) {
 
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>
 beta_fit_gpu_external(
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
-        Y_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
-        X_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
-        mu_beta_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const &
-        offset_host,
-    Eigen::VectorXf const & kk_host, int max_iter, float eps,int batch_size) {
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const
+        &Y_host,
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const
+        &X_host,
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const
+        &mu_beta_host,
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const
+        &offset_host,
+    Eigen::VectorXf const &kk_host, int max_iter, float eps, int batch_size,
+    std::vector<int>& iterations) {
   
   /******************************
    * Shape definition 
@@ -84,7 +85,7 @@ beta_fit_gpu_external(
   for (int i=0;i<genes;++i){
     k_host[i] = 1 / kk_host[i];
   }
-  
+
   std::vector<float> mu_beta_final(genes*features, 0.0);
 
   int deviceCount = 0;
@@ -278,10 +279,10 @@ beta_fit_gpu_external(
 	   * measure start time.
 	   ******************************/
 	  //I know, there is a narrow conversion here.
-          float norm(std::sqrt(genesBatch * features));
-          std::size_t iter{0};
-          auto t1 = std::chrono::high_resolution_clock::now();
-	     while (iter < max_iter && (norm/std::sqrt(genesBatch*features)) > eps) {
+          float norm{eps+2};
+	std::size_t iter{0};
+	auto t1 = std::chrono::high_resolution_clock::now();
+	while (iter < max_iter && (norm > eps)) {
             ++iter;
             einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me],workspace[me]);
 	    dim3 threads1D(256);
@@ -310,25 +311,35 @@ beta_fit_gpu_external(
             einsum_delta[me].execute(cutensorH[me], Zigma[me], last[me],workspace[me]);
             final1D<<<blocks1D, threads1D>>>(mu_beta[me], delta[me],
                                              genesBatch * features);
-            cublasSnrm2(cublasH[me], genesBatch * features, delta[me], 1,
-                        &norm);
-	  }
+            //            cublasSnrm2(cublasH[me], genesBatch * features,
+            //            delta[me], 1, &norm);
+            int max_id;
+	    float max_value;
+
+            CUBLAS_CHECK(cublasIsamax(cublasH[me], genesBatch * features,
+                                      delta[me], 1, &max_id));
+	    //FORTRAN INDEX, start from 1;
+            --max_id;
+	    CUDA_CHECK(cudaMemcpy(&norm, delta[me] + max_id, sizeof(float), cudaMemcpyDeviceToHost) );
+	   }
 	  auto t2 = std::chrono::high_resolution_clock::now();
 	  auto elapsed{t2-t1};
-/*          std::cout
+          std::cout
               << std::chrono::duration<double, std::milli>(elapsed).count() /
                      iter
               << " ms [avg iter time]" << std::endl;
 	  //	  std::cout << " iter " << iter << "\nmu_beta {"<<genesBatch<<","<<features <<"}\n";
 	  //   printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
 	  //   std::cout << std::flush;
-*/
+
           cudaDeviceSynchronize();
           CUDA_CHECK(cudaMemcpy(mu_beta_final.data() +  i *genesBatch * features,
 			     mu_beta[me], 
 			     genesBatch*features* sizeof(float),
 			     cudaMemcpyDeviceToHost));
           cudaDeviceSynchronize();
+	  
+	  std::fill(iterations.begin()  +  i *genesBatch , iterations.begin() +  +  (i+1) *genesBatch, iter);
             // copy back the data, this assume that I prepared something!
         }
       }
