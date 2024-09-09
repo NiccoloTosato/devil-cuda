@@ -280,10 +280,10 @@ beta_fit_gpu_external(
 	   * measure start time.
 	   ******************************/
 	  //I know, there is a narrow conversion here.
-          float norm{eps+2};
+          float norm{eps+1};
 	std::size_t iter{0};
 	auto t1 = std::chrono::high_resolution_clock::now();
-	while (iter < max_iter && (norm > eps)) {
+	while ((iter < max_iter) && (norm > eps)) {
             ++iter;
             einsum_cg_tmp2[me].execute(cutensorH[me], X[me], mu_beta[me],workspace[me]);
 	    dim3 threads1D(256);
@@ -323,7 +323,7 @@ beta_fit_gpu_external(
             CUDA_CHECK(cudaMemcpy(&norm, delta[me] + max_id, sizeof(float),
                                   cudaMemcpyDeviceToHost));
             norm = std::abs(norm);
-	    std::cout << norm << " ";
+	    //std::cout << norm << " ";
 	   }
 	  auto t2 = std::chrono::high_resolution_clock::now();
           auto elapsed{t2 - t1};
@@ -342,7 +342,7 @@ beta_fit_gpu_external(
 			     genesBatch*features* sizeof(float),
 			     cudaMemcpyDeviceToHost));
           cudaDeviceSynchronize();
-	  std::cout << "Batch " << i << "iter" << iter << std::endl;
+	  //	  std::cout << "Batch " << i << "iter" << iter << std::endl;
 	  std::fill(iterations.begin()  +  i *genesBatch , iterations.begin() +  +  (i+1) *genesBatch, iter);
             // copy back the data, this assume that I prepared something!
         }
