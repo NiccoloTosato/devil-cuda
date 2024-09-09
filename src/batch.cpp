@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <ostream>
@@ -321,6 +322,7 @@ beta_fit_gpu_external(
             --max_id;
             CUDA_CHECK(cudaMemcpy(&norm, delta[me] + max_id, sizeof(float),
                                   cudaMemcpyDeviceToHost));
+	    norm = std::abs(norm);
 	    std::cout << norm << " ";
 	   }
 	  auto t2 = std::chrono::high_resolution_clock::now();
