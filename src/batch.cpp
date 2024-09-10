@@ -322,28 +322,30 @@ beta_fit_gpu_external(
 	      norm = std::abs(norm);
 	    }
 	    auto t2 = std::chrono::high_resolution_clock::now();
-	    auto elapsed{t2 - t1};
+            auto elapsed{t2 - t1};
+	    
 	    /*
 	      std::cout
               << std::chrono::duration<double, std::milli>(elapsed).count() /
 	      iter
               << " ms [avg iter time]" << std::endl;
-	      //	  std::cout << " iter " << iter << "\nmu_beta {"<<genesBatch<<","<<features <<"}\n";
-	      //   printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
-	      //   std::cout << std::flush;
-	      */
-
+	    */
+	    /***********************************
+	     * Copy beta and iterations to host
+	     **********************************/
 	    CUDA_CHECK(cudaMemcpy(mu_beta_final.data() +  i *genesBatch * features,
 				  mu_beta[me], 
 				  genesBatch*features* sizeof(float),
 				  cudaMemcpyDeviceToHost));
 
 	    std::fill(iterations.begin()  +  i *genesBatch , iterations.begin() +  +  (i+1) *genesBatch, iter);
-            // copy back the data, this assume that I prepared something!
+
 	  }
 	}
       }
-      // free the memory
+      /*********************
+       * Free Cuda Memory
+       ********************/
       CUDA_CHECK(cudaFree(Zigma[me]));
       CUDA_CHECK(cudaFree(Bk_pointer[me]));
       CUDA_CHECK(cudaFree(Zigma_pointer[me]));
