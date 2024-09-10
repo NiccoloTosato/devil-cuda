@@ -88,7 +88,7 @@ beta_fit_gpu_external(
 
   for (int i=0;i<genes;++i){
     k_host[i] = 1 / kk_host[i];
-  
+  }  
     std::vector<float> mu_beta_final(genes*features, 0.0);
 
     int deviceCount = 0;
@@ -332,12 +332,12 @@ beta_fit_gpu_external(
 	      //   printMatrix<<<1, 1>>>(features, genesBatch, mu_beta[me]);
 	      //   std::cout << std::flush;
 	      */
-	    cudaDeviceSynchronize();
+
 	    CUDA_CHECK(cudaMemcpy(mu_beta_final.data() +  i *genesBatch * features,
 				  mu_beta[me], 
 				  genesBatch*features* sizeof(float),
 				  cudaMemcpyDeviceToHost));
-	    cudaDeviceSynchronize();
+
 	    std::fill(iterations.begin()  +  i *genesBatch , iterations.begin() +  +  (i+1) *genesBatch, iter);
             // copy back the data, this assume that I prepared something!
 	  }
