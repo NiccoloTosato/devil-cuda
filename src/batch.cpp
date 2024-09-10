@@ -22,6 +22,7 @@
 #include <omp.h>
 #include <Eigen/Dense>
 #include <list>
+
 template <typename T>
 struct CudaDeleter {
     void operator()(T* ptr) const {
