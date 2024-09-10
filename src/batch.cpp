@@ -277,7 +277,7 @@ beta_fit_gpu_external(
 	    //set something to zero, required ? BOH,sicuro non falliremo per sta cosa qui
 	    CUDA_CHECK( cudaMemset(w_q[me], 0, genesBatch * cells * sizeof(float)));
 	    CUDA_CHECK( cudaMemset(mu_g[me], 0, genesBatch*cells*sizeof(float)));
-	    // execute the computation
+
 	    /******************************
 	     * Initialize norm s.t. the initial check is always True , set iter to 0,
 	     * measure start time.
