@@ -18,12 +18,12 @@ __global__ void initIdentityGPU(float *Matrix, int rows, int cols,float alpha) {
 }
 
 
-int inverseMatrix2(cublasHandle_t cublasH, float *A_device[], float *A_inv_device[], int n ,int batchSize){
+void inverseMatrix2(cublasHandle_t cublasH, float *A_device[], float *A_inv_device[], int n ,int batchSize){
 
   // preliminaries declarations
   int *pivot = NULL; // pivot indices
   int *info = NULL; // error info
-  int col2=n*n;
+
   //allocation for pivot and info
   CUDA_CHECK(cudaMallocManaged(&pivot, sizeof(int)*n*batchSize));
   CUDA_CHECK(cudaMallocManaged(&info, sizeof(int)*batchSize));
@@ -36,8 +36,6 @@ int inverseMatrix2(cublasHandle_t cublasH, float *A_device[], float *A_inv_devic
                                    pivot,
                                    info,
 				   batchSize) );
-
-  //CUSOLVER_CHECK(cusolverDnSgetrf(cusolverH, n, n, A_device, n, workspace, pivot, info));
   for(int i=0;i<batchSize;++i) {
     if (info[i] != 0 ) {
       CUDA_CHECK(cudaDeviceSynchronize());
@@ -58,6 +56,6 @@ int inverseMatrix2(cublasHandle_t cublasH, float *A_device[], float *A_inv_devic
   CUDA_CHECK(cudaFree(pivot));
   CUDA_CHECK(cudaFree(info));
   
-  return 0; 
+  return; 
   
 }

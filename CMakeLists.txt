@@ -16,6 +16,18 @@ set(CMAKE_CUDA_ARCHITECTURES "80" "70" "72" "75")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}")
 
+#Google Test
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/heads/main.zip
+)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+
+
 #Set installation path
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 add_compile_options( -O3 -fopenmp)
@@ -98,3 +110,10 @@ endif()
 
 
 
+#Compile test
+
+add_executable(test.x src/test.cpp src/inverse.cpp)
+target_link_libraries(test.x gtest_main CUDA::cudart cutensor CUDA::cublas)
+enable_testing()
+include(GoogleTest)
+gtest_discover_tests(test.x)
