@@ -62,8 +62,7 @@ beta_fit_gpu_external(
         &X_host,
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const
         &mu_beta_host,
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> const
-        &offset_host,
+    Eigen::VectorXf const  &offset_host,
     Eigen::VectorXf const &kk_host, int max_iter, float eps, int batch_size,
     std::vector<int>& iterations) {
 
@@ -77,12 +76,12 @@ beta_fit_gpu_external(
 
   std::cout << "X {"<<X_host.rows()<<","<<X_host.cols() <<"}\n";
   std::cout << "Y {" << Y_host.rows() << "," << Y_host.cols() << "}\n";
-  std::cout << "offset {"<<offset_host.rows()<<","<<offset_host.cols() <<"}\n";
+  std::cout << "offset {"<<offset_host.size()<<", 1" <<"}\n";
   std::cout << "mu_beta {" << mu_beta_host.rows()  << "," << mu_beta_host.cols() << "}\n";
   std::cout << "K {" << kk_host.size() << "," << 1 << "}\n";
-  std::cout << "Genes" << genes <<std::endl;
-  std::cout << "Cells" << cells <<std::endl;
-  std::cout << "Features" << features <<std::endl;
+  std::cout << "Genes " << genes <<std::endl;
+  std::cout << "Cells " << cells <<std::endl;
+  std::cout << "Features " << features <<std::endl;
   std::size_t genesBatch = batch_size;
   Eigen::VectorXf k_host(kk_host.size());
 
@@ -159,15 +158,17 @@ beta_fit_gpu_external(
       constexpr int32_t numCachelines = 1024;
       CUTENSOR_CHECK( cutensorHandleResizePlanCache(cutensorH[me], numCachelines) );
       /********************************
-       * Allocate and copy X on each device, since it is const do it now
+       * Allocate and copy X and offset on each device, since it is const do it now
        *******************************/
       CUDA_CHECK( cudaMalloc((void**)&X[me], features*cells*sizeof(float)) );
       toGPU(X_host, X[me]);
+      //same offset for each genes
+      CUDA_CHECK( cudaMalloc((void**)&offset[me], 1*cells*sizeof(float)) );
+      toGPU(offset_host, offset[me]);
       /*********************************
        * Allocate Y,offset,K,mu_beta, but use genesBatch as size, not genes
        ********************************/
       CUDA_CHECK( cudaMalloc((void**)&Y[me], cells*genesBatch*sizeof(float)) );
-      CUDA_CHECK( cudaMalloc((void**)&offset[me], genesBatch*cells*sizeof(float)) );
       CUDA_CHECK( cudaMalloc((void**)&mu_beta[me], genesBatch*features*sizeof(float)) );
       CUDA_CHECK( cudaMalloc((void**)&k[me], genesBatch*sizeof(float)) );
       CUDA_CHECK( cudaMalloc((void**)&w_q[me], genesBatch*cells*sizeof(float)) );
@@ -257,11 +258,13 @@ beta_fit_gpu_external(
 	  {
 	    int me=omp_get_thread_num();
 	    // copy the necessary data!
-	    CUDA_CHECK(cudaMemcpy(
+	    // lo copiamo all'inizio
+	    /*
+            CUDA_CHECK(cudaMemcpy(
 				  offset[me],
 				  offset_host.data() + i  * genesBatch * cells,
 				  genesBatch * cells * sizeof(float), cudaMemcpyHostToDevice)); //CORRETTO
-
+	    */
 	    CUDA_CHECK(cudaMemcpy(mu_beta[me],
 				  mu_beta_host.data() + i * genesBatch * features,
 				  genesBatch * features * sizeof(float),
@@ -292,7 +295,7 @@ beta_fit_gpu_external(
 	      dim3 threads1D(256);
 	      dim3 blocks1D((genesBatch * cells + threads1D.x - 1) / threads1D.x);
 	      expGPU<<<blocks1D, threads1D>>>(cg_tmp2[me], offset[me], w_q[me],
-					      genesBatch * cells);
+					      genesBatch * cells,cells);
 	      dim3 threads2D(16,16);
 	      dim3 blocks2D((cells + threads2D.x - 1) / threads2D.x,
 			    (genesBatch + threads2D.y - 1) / threads2D.y);

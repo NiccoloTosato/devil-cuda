@@ -1,8 +1,8 @@
-__global__ void expGPU(float *A, float *B,float *C,std::size_t elem_count) {
+__global__ void expGPU(float *A, float *B,float *C,std::size_t elem_count,std::size_t cells) {
     int x = blockDim.x * blockIdx.x + threadIdx.x;
     if (x < elem_count) {
       //printf("TH id %d %f \n",x,A[x]);
-      C[x] = exp(-A[x] - B[x]);
+      C[x] = exp(-A[x] - B[x % cells]);
     }
 }
 
