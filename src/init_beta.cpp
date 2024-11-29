@@ -32,28 +32,31 @@ void init_beta(Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
                Eigen::VectorXf const & offset_host,
                float* beta, int n, int p, int m, int k) {
   
-  std::size_t cells = design_matrix_host.rows();
-  std::size_t features = design_matrix_host.cols();
-  std::size_t genes = Y_host.rows();
-  
+  std::size_t cells = design_matrix_host.cols();
+  std::size_t features = design_matrix_host.rows();
+  std::size_t genes = Y_host.cols();
+  std::cout << "cells: " << cells << std::endl;
+  std::cout << "genes: " << genes << std::endl;
+  std::cout << "features: " << features << std::endl;
   
   // Allocate device memory
 
   float *Y, *design_matrix, *offset, *norm_log_count_mat,*Q,*R;
   
-  cudaMalloc((void **)&Y, genes * cells * sizeof(float));
-  cudaMalloc((void **)&design_matrix, features * cells * sizeof(float));
-  cudaMalloc((void **)&offset, cells * sizeof(float));
+  CUDA_CHECK(cudaMalloc((void **)&Y, genes * cells * sizeof(float)));
+  CUDA_CHECK(  cudaMalloc((void **)&design_matrix, features * cells * sizeof(float)));
+  CUDA_CHECK(  cudaMalloc((void **)&offset, cells * sizeof(float)));
   //scoprire la size guardando i conti
-  cudaMalloc((void **)&norm_log_count_mat, genes * cells * sizeof(float));
+  CUDA_CHECK(  cudaMalloc((void **)&norm_log_count_mat, genes * cells * sizeof(float)));
 
-  cudaMalloc(&Q, features * cells * sizeof(float));
-  cudaMalloc(&R, features * features * sizeof(float));
-  cudaMalloc(&beta, genes * features * sizeof(float));
+  CUDA_CHECK(  cudaMalloc(&Q, features * cells * sizeof(float)));
+  CUDA_CHECK(  cudaMalloc(&R, features * features * sizeof(float)));
+  CUDA_CHECK(  cudaMalloc(&beta, genes * features * sizeof(float)));
 
   // Copy data to device, use toGPU
-
-  toGPU(Y_host, Y);
+  std::cout << "Y_host.size() " << Y_host.size() << "genes*cells " << genes*cells << std::endl;
+  //CUDA_CHECK(cudaMemcpy(Y,Y_host.data(), Y_host.size()* sizeof(float), cudaMemcpyHostToDevice));
+  toGPU(Y_host,Y);
   toGPU(design_matrix_host, design_matrix);
   toGPU(offset_host, offset);
   
@@ -67,7 +70,6 @@ void init_beta(Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
     int gridSize = (total_elements + blockSize - 1) / blockSize;
     compute_log1p<<<gridSize, blockSize>>>(Y, offset, norm_log_count_mat,cells, genes);
     cudaDeviceSynchronize();
-
     // Step 2: Perform QR decomposition on design_matrix
     cusolverDnHandle_t handle;
     cusolverDnCreate(&handle);
@@ -76,7 +78,6 @@ void init_beta(Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
     float *d_work;
     int *dev_info;
     int lwork;
-
     cusolverDnSgeqrf_bufferSize(handle, features, cells, design_matrix, features, &lwork);
     cudaMalloc(&d_work, lwork * sizeof(float));
     cudaMalloc(&dev_info, sizeof(int));
@@ -87,6 +88,10 @@ void init_beta(Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
     // Extract Q and R
     cusolverDnSormqr(handle, CUBLAS_SIDE_LEFT, CUBLAS_OP_N, cells, genes, features, design_matrix, cells, R, Q, cells, d_work, lwork, dev_info);
     cudaDeviceSynchronize();
+    
+    std::cout << "Fino qui ok!" << std::endl;
+    return;
+
     /*
     cusolverDnDormqr(handle, CUBLAS_SIDE_LEFT, CUBLAS_OP_N,
                  cells, genes, features, 
