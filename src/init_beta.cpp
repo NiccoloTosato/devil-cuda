@@ -169,7 +169,7 @@ if (beta_host == NULL) {
                             C, m_rows * sizeof(float),
                             n_cols * sizeof(float), genes,
                             cudaMemcpyDeviceToHost));
-Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> beta_matrix(beta_host, n_cols, genes);
+Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>> beta_matrix(beta_host, genes, features);
     // Cleanup
     CUBLAS_CHECK(cublasDestroy(cublas_handle));
     CUSOLVER_CHECK(cusolverDnDestroy(cusolver_handle));
