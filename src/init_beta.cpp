@@ -34,9 +34,9 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
                Eigen::VectorXf const & offset_host ) {
 
     // Adjusted dimensions
-    std::size_t cells = design_matrix_host.cols();    // m_rows
-    std::size_t features = design_matrix_host.rows(); // n_cols
-    std::size_t genes = Y_host.cols();
+    std::size_t cells = design_matrix_host.rows();    // m_rows
+    std::size_t features = design_matrix_host.cols(); // n_cols
+    std::size_t genes = Y_host.rows();
 
     int m_rows = static_cast<int>(cells);    // Number of rows (cells)
     int n_cols = static_cast<int>(features); // Number of columns (features)
