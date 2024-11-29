@@ -42,14 +42,17 @@ link_directories( ${CUTENSOR_HOME}/lib/cutensor ~/.local/lib/cutensor)
 set( BETA_FIT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/inverse.cpp
 			${CMAKE_CURRENT_SOURCE_DIR}/src/einsum.cpp
 			${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cu
-			${CMAKE_CURRENT_SOURCE_DIR}/src/batch.cpp)
+			${CMAKE_CURRENT_SOURCE_DIR}/src/batch.cpp
+			${CMAKE_CURRENT_SOURCE_DIR}/src/init_beta.cpp)
 
 set( BETA_FIT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/inverse.hpp
                         ${CMAKE_CURRENT_SOURCE_DIR}/src/einsum.hpp
                        	${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.h
-                       	${CMAKE_CURRENT_SOURCE_DIR}/src/batch.hpp)
+                       	${CMAKE_CURRENT_SOURCE_DIR}/src/batch.hpp
+			${CMAKE_CURRENT_SOURCE_DIR}/src/init_beta.hpp)
 
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/inverse.cpp PROPERTIES LANGUAGE CUDA)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/init_beta.cpp PROPERTIES LANGUAGE CUDA)
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/batch.cpp PROPERTIES LANGUAGE CUDA)
 
 set(BETA_FIT_LIBRARIES  CUDA::cudart CUDA::cublas CUDA::cusolver cutensor OpenMP::OpenMP_CXX Eigen3::Eigen)
