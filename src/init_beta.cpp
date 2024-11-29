@@ -21,9 +21,8 @@ __global__ void compute_log1p(const float* y, const float* offset_matrix, float*
     int total_elements =  cells * genes;
 
     if (idx < total_elements) {
-        int row = idx / genes;
-        int col = idx % genes;
-        norm_log_count_mat[idx] = log1p(y[idx] / exp(offset_matrix[row]));
+        int col = idx % genes; // the max
+        norm_log_count_mat[idx] = log1p(y[idx] / exp(offset_matrix[col]));
     }
 }
 // CUDA implementation of init_beta function
@@ -44,10 +43,10 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
 
     // Allocate device memory
     float *Y, *design_matrix, *offset, *norm_log_count_mat;
-    CUDA_CHECK(cudaMalloc((void **)&Y, m_rows * genes * sizeof(float)));
-    CUDA_CHECK(cudaMalloc((void **)&design_matrix, m_rows * n_cols * sizeof(float)));
-    CUDA_CHECK(cudaMalloc((void **)&offset, m_rows * sizeof(float)));
-    CUDA_CHECK(cudaMalloc((void **)&norm_log_count_mat, m_rows * genes * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void **)&Y, cells * genes * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void **)&design_matrix, cells * features * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void **)&offset, cells * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void **)&norm_log_count_mat, cells * genes * sizeof(float)));
     //CUDA_CHECK(cudaMalloc(&beta, n_cols * genes * sizeof(float)));
 
     // Copy data to device
@@ -59,7 +58,7 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
     int total_elements = m_rows * genes;
     int blockSize = 256;
     int gridSize = (total_elements + blockSize - 1) / blockSize;
-    compute_log1p<<<gridSize, blockSize>>>(Y, offset, norm_log_count_mat, m_rows, genes);
+    compute_log1p<<<gridSize, blockSize>>>(Y, offset, norm_log_count_mat, cells, genes);
     CUDA_CHECK(cudaDeviceSynchronize());
 
     // Step 2: Perform QR decomposition on design_matrix
