@@ -36,7 +36,7 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
     std::size_t cells = design_matrix_host.rows();    // m_rows
     std::size_t features = design_matrix_host.cols(); // n_cols
     std::size_t genes = Y_host.rows();
-    std::cout << offset_host << std::endl;
+
     int m_rows = static_cast<int>(cells);    // Number of rows (cells)
     int n_cols = static_cast<int>(features); // Number of columns (features)
     int min_mn = (m_rows < n_cols) ? m_rows : n_cols;
@@ -89,7 +89,8 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
         d_work_geqrf, lwork_geqrf, dev_info));
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    // Check dev_info for successful QR factorization
+    // Check dev_info for successful QR factorization,
+    // sta cosa non ha senso
     int h_dev_info = 0;
     CUDA_CHECK(cudaMemcpy(&h_dev_info, dev_info, sizeof(int), cudaMemcpyDeviceToHost));
     if (h_dev_info != 0) {
