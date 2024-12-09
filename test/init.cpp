@@ -49,13 +49,14 @@ int main() {
  Eigen::Map<Eigen::VectorXf>  offset_host(offset_hostv.data(), cells);
  std::cout << "Data loaded" << std::endl;
  std::vector<int> iterations(genes);
-
-auto beta = init_beta_external(Y_host,X_host,offset_host);
+auto Y_host_t=Y_host.transpose().eval();
+auto beta = init_beta_external(Y_host_t,X_host,offset_host);
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> test = beta;
+
     std::cout << "Beta matrix gpu (size: " << features << " x " << genes << "):" << std::endl;
 //std::cout << beta << std::endl;
     for (int i = 0; i < features*genes; ++i) {      // Iterate over rows (features)
-      std::cout << beta.data()[i] << " " << output_hostv.data()[i] << std::endl;
+	  std::cout << beta.data()[i] << " " << output_hostv.data()[i] << std::endl;
      }
 
   std::cout << "DONE \n";
