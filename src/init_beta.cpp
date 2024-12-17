@@ -24,9 +24,8 @@ __global__ void compute_log1p(const float* y, const float* offset_matrix, float*
         norm_log_count_mat[idx] = log1pf(y[idx] / expf(offset_matrix[j]));
     }
 }
-__global__ void norm_log_count_kernel(const float* __restrict__ y,
+__global__ void norm_log_count_kernel(float* __restrict__ norm_log_count_mat,
                                       const float* __restrict__ offset,
-                                      float* __restrict__ norm_log_count_mat,
                                       int genes, int cells)
 {
 
@@ -35,7 +34,7 @@ __global__ void norm_log_count_kernel(const float* __restrict__ y,
     
 if (i < genes && j < cells) {
   //float val = y[i+genes*j];
-   float val = y[j+cells*i];
+   float val = norm_log_count_mat[j+cells*i];
         float exp_off = expf(offset[j]);
         float ratio = val / exp_off;
         float out_val = log1pf(ratio);
@@ -64,19 +63,16 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
 	      Eigen::ColMajor> init_beta_external(Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,       Eigen::ColMajor> const &Y_host,
 						  Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
 						  Eigen::ColMajor> const &design_matrix_host,
-						  Eigen::VectorXf const & offset_host ) {
+						  Eigen::VectorXf const & offset_host,   int batch_size ) {
 
   // Adjusted dimensions
   std::size_t cells = design_matrix_host.rows();    // m_rows, OK
   std::size_t features = design_matrix_host.cols(); // n_cols, OK
   std::size_t genes = Y_host.cols();
-
-  //int m_rows = static_cast<int>(cells);    // Number of rows (cells),
-  //int n_cols = static_cast<int>(features); // Number of columns (features)
   int min_mn = (cells < features) ? cells : features;
 
   // Allocate device memory
-  float *Y, *design_matrix, *offset, *norm_log_count_mat;
+  float *Y, *design_matrix, *offset;
 
   CUDA_CHECK(cudaMalloc((void **)&design_matrix, cells * features * sizeof(float))); //OK
   CUDA_CHECK(cudaMalloc((void **)&offset, cells * sizeof(float))); //OK
@@ -89,16 +85,16 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
   toGPU(design_matrix_host, design_matrix); //once
   toGPU(offset_host, offset); //once
 
-  std::cout<<std::endl;
-  std::cout<<"offset matrix gpu\n";
-  printMatrixKernel<<<1, 1>>>(offset, cells, 1, 10, 1);
-  CUDA_CHECK(cudaDeviceSynchronize());
-  std::cout<<std::endl;
+  //  std::cout<<std::endl;
+  //  std::cout<<"offset matrix gpu\n";
+  //  printMatrixKernel<<<1, 1>>>(offset, cells, 1, 10, 1);
+  //  CUDA_CHECK(cudaDeviceSynchronize());
+  //  std::cout<<std::endl;
   // batch
 
-  int batch_size = 16;
+
   int num_batch = genes / batch_size;
-  CUDA_CHECK(cudaMalloc((void **)&norm_log_count_mat, cells * batch_size * sizeof(float))); //OK
+  //CUDA_CHECK(cudaMalloc((void **)&norm_log_count_mat, cells * batch_size * sizeof(float))); //OK
   CUDA_CHECK(cudaMalloc((void **)&Y, cells * batch_size * sizeof(float))); //OK
   float* beta_host = (float*)malloc(features * genes * sizeof(float));
   if (beta_host == NULL) {
@@ -113,19 +109,19 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
 
 
   //workspace
-      // Allocate tau
-    float *tau;
-    CUDA_CHECK(cudaMalloc((void **)&tau, min_mn * sizeof(float))); //OK
-    // Workspace and info
-    int lwork_geqrf = 0;
-    float *d_work_geqrf = NULL;
-    int *dev_info = NULL;
-    CUDA_CHECK(cudaMalloc((void**)&dev_info, sizeof(int)));
-    //si e' giusto
-    CUSOLVER_CHECK(cusolverDnSgeqrf_bufferSize(
-					       cusolver_handle, cells, features, design_matrix, cells, &lwork_geqrf)); //OK
-    // Allocate workspace for geqrf
-    CUDA_CHECK(cudaMalloc((void**)&d_work_geqrf, lwork_geqrf * sizeof(float))); //OK
+  // Allocate tau
+  float *tau;
+  CUDA_CHECK(cudaMalloc((void **)&tau, min_mn * sizeof(float))); //OK
+  // Workspace and info
+  int lwork_geqrf = 0;
+  float *d_work_geqrf = NULL;
+  int *dev_info = NULL;
+  CUDA_CHECK(cudaMalloc((void**)&dev_info, sizeof(int)));
+  //si e' giusto
+  CUSOLVER_CHECK(cusolverDnSgeqrf_bufferSize(
+					     cusolver_handle, cells, features, design_matrix, cells, &lwork_geqrf)); //OK
+  // Allocate workspace for geqrf
+  CUDA_CHECK(cudaMalloc((void**)&d_work_geqrf, lwork_geqrf * sizeof(float))); //OK
     // Perform QR factorization
     int lwork_ormqr = 0;
     float *d_work_ormqr = NULL;
@@ -133,86 +129,72 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
     CUSOLVER_CHECK(cusolverDnSormqr_bufferSize(
 					       cusolver_handle, CUBLAS_SIDE_LEFT, CUBLAS_OP_T,
 					       cells, batch_size, min_mn, design_matrix, cells, tau,
-					       norm_log_count_mat, cells, &lwork_ormqr));
-    // Allocate workspace for ormqr
-    CUDA_CHECK(cudaMalloc((void**)&d_work_ormqr, lwork_ormqr * sizeof(float)));
-      CUSOLVER_CHECK(cusolverDnSgeqrf(cusolver_handle, cells, features,
+					       Y, cells, &lwork_ormqr));
+    CUSOLVER_CHECK(cusolverDnSgeqrf(cusolver_handle, cells, features,
                                       design_matrix, cells, tau, d_work_geqrf,
                                       lwork_geqrf, dev_info)); // OK
 
-    for (int i = 0; i < num_batch; i++) {
-      float* h_design=(float*)malloc(sizeof(float)*10);
-      std::cout<<std::endl;
-    CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK( cudaMemcpy(Y, ((float*) Y_host.data())+batch_size*cells*i, batch_size *cells* sizeof(float), cudaMemcpyHostToDevice) );      
-    dim3 blockDim(16, 16);
-    dim3 gridDim((batch_size + blockDim.x - 1)/blockDim.x, (cells + blockDim.y - 1)/blockDim.y);
-    norm_log_count_kernel<<<gridDim, blockDim>>>(Y, offset, norm_log_count_mat, batch_size, cells);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    int h_dev_info = 0;
-    CUDA_CHECK(cudaMemcpy(&h_dev_info, dev_info, sizeof(int), cudaMemcpyDeviceToHost));
-    if (h_dev_info != 0) {
-      std::cerr << "QR factorization failed with info = " << h_dev_info << std::endl;
-    }
-    // Check dev_info for successful QR factorization,
-    // Step 3: Apply Q^T to norm_log_count_mat using cusolverDnSormqr
-    // Result will overwrite norm_log_count_mat
-    // Workspace for ormqr
-    // Apply Q^T to norm_log_count_mat
-    CUSOLVER_CHECK(cusolverDnSormqr(
-				    cusolver_handle, CUBLAS_SIDE_LEFT, CUBLAS_OP_T,
-				    cells, batch_size, min_mn, design_matrix, cells, tau,
-				    norm_log_count_mat, cells, d_work_ormqr, lwork_ormqr, dev_info));
-    CUDA_CHECK(cudaDeviceSynchronize());
-    // Check dev_info for successful application of Q^T
-    CUDA_CHECK(cudaMemcpy(&h_dev_info, dev_info, sizeof(int), cudaMemcpyDeviceToHost));
-    if (h_dev_info != 0) {
-      std::cerr << "Applying Q^T failed with info = " << h_dev_info << std::endl;
-    }
-    // Now, C contains Q^T * norm_log_count_mat (cells x genes)
-    // But we only need the first features rows (since Q^T * norm_log_count_mat results in cells x genes matrix)
-    // So we can treat C as having leading dimension m_rows but use only features leading rows
+  CUDA_CHECK(cudaFree(d_work_geqrf));
+    // Allocate workspace for ormqr
+    CUDA_CHECK(cudaMalloc((void**)&d_work_ormqr, lwork_ormqr * sizeof(float)));
+      for (int i = 0; i < num_batch; i++) {
+	float* h_design=(float*)malloc(sizeof(float)*10);
+	std::cout<<std::endl;
+	CUDA_CHECK(cudaDeviceSynchronize());
+	CUDA_CHECK( cudaMemcpy(Y, ((float*) Y_host.data())+batch_size*cells*i, batch_size *cells* sizeof(float), cudaMemcpyHostToDevice) );      
+	dim3 blockDim(16, 16);
+	dim3 gridDim((batch_size + blockDim.x - 1)/blockDim.x, (cells + blockDim.y - 1)/blockDim.y);
+	norm_log_count_kernel<<<gridDim, blockDim>>>(Y, offset,  batch_size, cells);
+	CUDA_CHECK(cudaDeviceSynchronize());
+	int h_dev_info = 0;
+	CUDA_CHECK(cudaMemcpy(&h_dev_info, dev_info, sizeof(int), cudaMemcpyDeviceToHost));
+	if (h_dev_info != 0) {
+	  std::cerr << "QR factorization failed with info = " << h_dev_info << std::endl;
+	}
+	// Step 3: Apply Q^T to norm_log_count_mat using cusolverDnSormqr
+	// Apply Q^T to norm_log_count_mat
+	CUSOLVER_CHECK(cusolverDnSormqr(
+					cusolver_handle, CUBLAS_SIDE_LEFT, CUBLAS_OP_T,
+					cells, batch_size, min_mn, design_matrix, cells, tau,
+					Y, cells, d_work_ormqr, lwork_ormqr, dev_info));
+	CUDA_CHECK(cudaMemcpy(&h_dev_info, dev_info, sizeof(int), cudaMemcpyDeviceToHost));
+	if (h_dev_info != 0) {
+	  std::cerr << "Applying Q^T failed with info = " << h_dev_info << std::endl;
+	}
+	// Step 4: Solve R * beta = C (only first features rows of C)
+	float alpha = 1.0f;
+	CUBLAS_CHECK(cublasStrsm(
+				 cublas_handle,
+				 CUBLAS_SIDE_LEFT,          // Solve on the left side: R * X = C
+				 CUBLAS_FILL_MODE_UPPER,    // R is upper triangular
+				 CUBLAS_OP_N,               // No transpose on R
+				 CUBLAS_DIAG_NON_UNIT,      // R has non-unit diagonal
+				 features,                    // Number of rows of X and R
+				 batch_size,                     // Number of columns of X and C
+				 &alpha,                    // Scalar alpha
+				 design_matrix,             // Pointer to R within design_matrix
+				 cells,                    // Leading dimension of design_matrix (lda)
+				 Y,                         // Right-hand side matrix C (first n_cols rows)
+				 cells));                  // Leading dimension of C (ldb)
 
-    // Step 4: Solve R * beta = C (only first features rows of C)
+	CUDA_CHECK(cudaMemcpy2D(((float *)beta_host) + features * batch_size * i,
+				features * sizeof(float),Y,
+				cells * sizeof(float), features * sizeof(float),
+				batch_size, cudaMemcpyDeviceToHost));
+      }
 
-    float alpha = 1.0f;
-
-    // R is stored in the upper triangular part of design_matrix (features x features)
-    // C (first n_cols rows) is (features x genes)
-    CUBLAS_CHECK(cublasStrsm(
-			     cublas_handle,
-			     CUBLAS_SIDE_LEFT,          // Solve on the left side: R * X = C
-			     CUBLAS_FILL_MODE_UPPER,    // R is upper triangular
-			     CUBLAS_OP_N,               // No transpose on R
-			     CUBLAS_DIAG_NON_UNIT,      // R has non-unit diagonal
-			     features,                    // Number of rows of X and R
-			     batch_size,                     // Number of columns of X and C
-			     &alpha,                    // Scalar alpha
-			     design_matrix,             // Pointer to R within design_matrix
-			     cells,                    // Leading dimension of design_matrix (lda)
-			     norm_log_count_mat,                         // Right-hand side matrix C (first n_cols rows)
-			     cells));                  // Leading dimension of C (ldb)
-
-    CUDA_CHECK(cudaMemcpy2D(((float *)beta_host) + features * batch_size * i,
-                            features * sizeof(float), norm_log_count_mat,
-                            cells * sizeof(float), features * sizeof(float),
-                            batch_size, cudaMemcpyDeviceToHost));
-    //cudaMemset(norm_log_count_mat, 0, cells*batch_size * sizeof(float));
-  }
-      
-
-
-  Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> beta_matrix(beta_host,genes,features);
-  // Cleanup
+  // Destroy handles
   CUBLAS_CHECK(cublasDestroy(cublas_handle));
   CUSOLVER_CHECK(cusolverDnDestroy(cusolver_handle));
+  // Cleanup
   CUDA_CHECK(cudaFree(Y));
   CUDA_CHECK(cudaFree(design_matrix));
   CUDA_CHECK(cudaFree(offset));
-  CUDA_CHECK(cudaFree(norm_log_count_mat));
   CUDA_CHECK(cudaFree(tau));
-  CUDA_CHECK(cudaFree(d_work_geqrf));
+
   CUDA_CHECK(cudaFree(d_work_ormqr));
   CUDA_CHECK(cudaFree(dev_info));
+  // Copy back the result
+  Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> beta_matrix(beta_host,genes,features);
   return beta_matrix;
 }
